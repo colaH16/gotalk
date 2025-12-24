@@ -5,17 +5,16 @@
     <title>CoTalk 🥤</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <link href="/output.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
         body { font-family: 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
-        
-        /* 스크롤바 숨김 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 등장 애니메이션 */
+        /* 말풍선 애니메이션 */
         @keyframes popIn {
             0% { opacity: 0; transform: translateY(10px) scale(0.9); }
             100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -26,59 +25,71 @@
 
 <body x-data="appData()" x-init="initApp()" class="bg-blue-100 h-[100dvh] flex flex-col max-w-md mx-auto shadow-2xl relative">
 
-    <header class="bg-yellow-300 p-3 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-between items-center h-12">
+    <header class="bg-yellow-300 p-3 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-center items-center h-12">
         <span>CoTalk 🥤 <span x-text="myNick ? `(${myNick})` : ''" class="text-xs font-normal"></span></span>
-        <button @click="showSettings = !showSettings" class="btn btn-ghost btn-circle btn-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-        </button>
     </header>
 
-    <div id="chat-box" class="flex-1 overflow-y-auto p-3 flex flex-col gap-1 bg-[#b2c7d9]">
+    <div id="chat-box" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 bg-[#b2c7d9]">
         <div x-show="hasMore" class="text-center py-2">
-            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full h-6 min-h-0">⬆ 더 불러오기</button>
+            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full">⬆ 더 불러오기</button>
         </div>
 
         <template x-for="msg in messages" :key="msg.id">
-            <div :id="'msg-'+msg.id" class="chat msg-anim mb-0" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
+            <div :id="'msg-'+msg.id" class="chat msg-anim" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
                 
-                <div class="chat-header text-[10px] opacity-50 mb-0.5 ml-1" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></div>
+                <div class="chat-header text-xs opacity-50 ml-1" x-show="msg.sender_nick !== myNick">
+                    <span x-text="msg.sender_nick"></span>
+                    <time class="text-[9px] opacity-70 ml-1" x-text="msg.time"></time>
+                </div>
                 
-                <div class="chat-bubble text-sm shadow-sm min-h-0 py-2 px-3" 
+                <div class="chat-bubble text-sm shadow-sm" 
                      :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
                      :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
                     <span x-text="msg.content"></span>
                 </div>
                 
-                <div class="chat-footer opacity-50 text-[9px] mt-0.5" x-text="msg.time"></div>
+                <div class="chat-footer opacity-50 text-[9px] mr-1" x-show="msg.sender_nick === myNick">
+                    <time x-text="msg.time"></time>
+                </div>
             </div>
         </template>
     </div>
 
-    <div x-show="showSettings" @click.outside="showSettings = false" x-transition class="absolute bottom-16 right-4 w-60 bg-white rounded-xl shadow-xl p-4 z-20 border border-gray-200">
-        <h3 class="font-bold text-sm mb-2">설정</h3>
-        <div class="form-control w-full mb-3">
-            <label class="label py-1"><span class="label-text text-xs">내 말풍선 색상</span></label>
-            <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-8 cursor-pointer rounded border border-gray-300">
+    <div x-show="showSettings" @click.outside="showSettings = false" x-transition 
+         class="absolute bottom-16 left-2 w-64 bg-white rounded-xl shadow-xl p-4 z-30 border border-gray-200">
+        <h3 class="font-bold text-sm mb-3">설정 ⚙️</h3>
+        <div class="form-control w-full mb-4">
+            <label class="label py-1"><span class="label-text text-xs font-medium">내 말풍선 색상</span></label>
+            <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-9 cursor-pointer rounded-md border border-gray-300 p-1">
         </div>
-        <button @click="changeNickname()" class="btn btn-sm btn-outline btn-error w-full">로그아웃</button>
+        <button @click="changeNickname()" class="btn btn-sm btn-error w-full text-white">로그아웃 (닉네임 변경)</button>
     </div>
 
-    <form @submit.prevent="sendMessage" class="bg-white p-2 flex gap-2 border-t border-gray-200 items-center">
-        <input type="text" x-model="inputMsg" placeholder="메시지 입력..." class="input input-bordered input-sm w-full rounded-full focus:outline-none h-10" />
-        <button type="submit" class="btn btn-sm btn-circle bg-yellow-300 border-none text-gray-800 hover:bg-yellow-400 h-10 w-10">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
-                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+    <div class="bg-white p-2 border-t border-gray-200 flex items-center gap-2 relative z-20">
+        <button @click="showSettings = !showSettings" class="btn btn-sm btn-circle btn-ghost text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.332.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.217.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.583-.495.645-.869l.214-1.281z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
         </button>
-    </form>
 
-    <dialog id="login_modal" class="modal modal-bottom sm:modal-middle bg-black/50">
-        <div class="modal-box">
-            <h3 class="font-bold text-lg">환영합니다! 👋</h3>
-            <p class="py-4 text-sm">사용하실 닉네임을 입력해주세요.</p>
-            <form method="dialog" @submit.prevent="setNickname">
-                <input type="text" x-model="tempNick" placeholder="닉네임" class="input input-bordered w-full mb-4" />
-                <button class="btn btn-warning w-full" :disabled="!tempNick">시작하기</button>
+        <form @submit.prevent="sendMessage" class="flex-1 flex gap-2">
+            <input type="text" x-model="inputMsg" placeholder="메시지 입력..." class="input input-bordered input-sm w-full rounded-full focus:outline-none h-10" />
+            <button type="submit" class="btn btn-sm btn-circle bg-yellow-300 border-none text-gray-800 hover:bg-yellow-400 h-10 w-10 shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                    <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <dialog id="login_modal" class="modal modal-bottom sm:modal-middle bg-black/50" @click.self="document.getElementById('login_modal').close()">
+        <div class="modal-box relative">
+             <h3 class="font-bold text-lg">환영합니다! 👋</h3>
+            <p class="py-4 text-sm">채팅에서 사용할 닉네임을 입력해주세요.</p>
+            <form @submit.prevent="setNickname">
+                <input type="text" x-model="tempNick" placeholder="닉네임" class="input input-bordered w-full mb-4 focus:input-warning" autofocus />
+                <button class="btn btn-warning w-full font-bold" :disabled="!tempNick.trim()">시작하기</button>
             </form>
         </div>
     </dialog>
@@ -94,26 +105,33 @@
                 tempNick: '',
                 hasMore: false,
                 minID: -1,
+                isLoading: false,
 
                 async initApp() {
                     if (!this.myNick) {
                         document.getElementById('login_modal').showModal();
                     } else {
-                        this.checkServerColor(this.myNick);
+                        await this.checkServerColor(this.myNick);
                         await this.loadHistory();
                         this.connectSSE();
                     }
+                    this.setupViewport();
+                },
+
+                setupViewport() {
                     if (window.visualViewport) {
-                        window.visualViewport.addEventListener('resize', () => {
+                        const resizeHandler = () => {
                             document.body.style.height = window.visualViewport.height + 'px';
                             window.scrollTo(0, 0);
-                        });
+                        };
+                        window.visualViewport.addEventListener('resize', resizeHandler);
+                        resizeHandler(); // 초기 실행
                     }
                 },
 
                 async setNickname() {
-                    if (!this.tempNick) return;
-                    this.myNick = this.tempNick;
+                    if (!this.tempNick.trim()) return;
+                    this.myNick = this.tempNick.trim();
                     localStorage.setItem('cotalk_nick', this.myNick);
                     await this.checkServerColor(this.myNick);
                     document.getElementById('login_modal').close();
@@ -124,10 +142,11 @@
                 async checkServerColor(nick) {
                     try {
                         const res = await fetch(`/login?nick=${encodeURIComponent(nick)}`);
+                        if (!res.ok) throw new Error('Login fetch failed');
                         const data = await res.json();
                         if (data.color_code) this.myColor = data.color_code;
                         localStorage.setItem('cotalk_color', this.myColor);
-                    } catch (e) {}
+                    } catch (e) { console.error(e); }
                 },
 
                 async updateColor() {
@@ -138,8 +157,11 @@
                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                             body: `nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
                         });
-                        location.reload();
-                    } catch(e) {}
+                        location.reload(); // 색상 변경 후 전체 새로고침
+                    } catch(e) { 
+                        console.error("Color update failed", e);
+                        alert("색상 변경에 실패했습니다.");
+                    }
                 },
 
                 changeNickname() {
@@ -150,30 +172,34 @@
                 },
 
                 async loadHistory() {
+                    if (this.isLoading) return;
+                    this.isLoading = true;
                     let url = '/history';
                     if (this.minID !== -1) url += `?before_id=${this.minID}`;
                     
-                    const res = await fetch(url);
-                    const history = await res.json();
-                    
-                    if (history && history.length > 0) {
-                        this.minID = history[history.length - 1].id;
-                        this.hasMore = true;
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error('History fetch failed');
+                        const history = await res.json();
                         
-                        // [핵심 수정] 서버가 준 최신순 데이터(DESC)를 뒤집어서(ASC) 과거순으로 정렬
-                        const sortedHistory = history.reverse();
-
-                        const newMsgs = sortedHistory.filter(h => !this.messages.some(m => m.id === h.id));
-                        
-                        // 과거 메시지는 배열의 '앞'에 붙임
-                        this.messages = [...newMsgs, ...this.messages];
-                        
-                        // 첫 로딩일 때만 스크롤을 맨 아래로
-                        if (url === '/history') {
-                            this.$nextTick(() => document.getElementById('chat-box').scrollTop = 99999);
+                        if (history && history.length > 0) {
+                            this.minID = history[history.length - 1].id;
+                            this.hasMore = true;
+                            const sortedHistory = history.reverse();
+                            const newMsgs = sortedHistory.filter(h => !this.messages.some(m => m.id === h.id));
+                            this.messages = [...newMsgs, ...this.messages];
+                            
+                            if (url === '/history') {
+                                this.$nextTick(this.scrollToBottom);
+                            }
+                        } else {
+                            this.hasMore = false;
                         }
-                    } else {
+                    } catch (e) { 
+                        console.error(e);
                         this.hasMore = false;
+                    } finally {
+                        this.isLoading = false;
                     }
                 },
 
@@ -182,25 +208,31 @@
                     evtSource.onmessage = (e) => {
                         const data = JSON.parse(e.data);
                         if (this.messages.some(m => m.id === data.id)) return;
-                        
-                        // 새 메시지는 배열 '뒤'에 붙임 (Push)
                         this.messages.push(data);
-                        
-                        this.$nextTick(() => {
-                            const chatBox = document.getElementById('chat-box');
-                            chatBox.scrollTop = chatBox.scrollHeight;
-                        });
+                        this.$nextTick(this.scrollToBottom);
                     };
+                    evtSource.onerror = (err) => { console.log("SSE connection error, retrying...", err); };
                 },
 
                 sendMessage() {
-                    if (!this.inputMsg) return;
+                    if (!this.inputMsg.trim()) return;
+                    const msgToSend = this.inputMsg;
+                    this.inputMsg = ''; // 먼저 비움
+                    
                     fetch('/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `msg=${encodeURIComponent(this.inputMsg)}&nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
+                        body: `msg=${encodeURIComponent(msgToSend)}&nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
+                    }).catch(e => {
+                        console.error("Send failed", e);
+                        this.inputMsg = msgToSend; // 실패 시 복구 (선택사항)
+                        alert("메시지 전송 실패");
                     });
-                    this.inputMsg = '';
+                },
+
+                scrollToBottom() {
+                    const chatBox = document.getElementById('chat-box');
+                    chatBox.scrollTop = chatBox.scrollHeight;
                 }
             }
         }
