@@ -193,7 +193,9 @@
 
                 connectSSE() {
                     console.log("Connecting SSE...");
-                    const evtSource = new EventSource("/stream");
+                    // [수정] 닉네임을 쿼리 파라미터로 함께 전송
+                    const evtSource = new EventSource(`/stream?nick=${encodeURIComponent(this.myNick)}`);
+                    
                     evtSource.onmessage = (e) => {
                         if (e.data === ":keepalive") return;
                         const data = JSON.parse(e.data);

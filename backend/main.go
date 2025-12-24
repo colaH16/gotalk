@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv" // [추가됨] 이게 빠져서 에러가 났었습니다!
 	"sync"
 	"time"
 
@@ -19,11 +20,10 @@ var (
 	db       *sql.DB
 	hostname string
 
-	// [핵심] 사용자 관리용 Hub
-	// 접속한 클라이언트들의 채널을 보관하는 명부
-	clients   = make(map[chan string]bool) 
-	broadcast = make(chan string)           // NATS에서 받은 메시지를 뿌리는 파이프
-	mutex     = sync.Mutex{}                // 명부 작성할 때 충돌 방지용 자물쇠
+	// [Hub 패턴] 사용자 관리 및 방송용 변수들
+	clients   = make(map[chan string]bool) // 접속한 클라이언트 목록
+	broadcast = make(chan string)          // 방송 대기열
+	mutex     = sync.Mutex{}               // 동시성 제어용 자물쇠
 )
 
 type Message struct {
@@ -45,8 +45,7 @@ func main() {
 	initDB()
 	initNATS()
 
-	// [중요] 방송실 가동 (고루틴)
-	// 들어오는 메시지를 모든 클라이언트에게 배달하는 역할
+	// [방송실 가동] 들어오는 메시지를 사용자들에게 뿌리는 고루틴 실행
 	go handleMessages()
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
@@ -63,21 +62,17 @@ func main() {
 	}
 }
 
-// [핵심 로직] 방송실: NATS에서 온 메시지를 접속자 전원에게 쏜다
+// [방송실] NATS에서 받은 메시지를 현재 접속한 모든 사용자에게 전달
 func handleMessages() {
 	for {
-		// 1. 방송 파이프에서 메시지 하나 꺼냄
-		msg := <-broadcast
+		msg := <-broadcast // 메시지가 올 때까지 대기
 		
-		// 2. 명부(clients)를 펼침 (자물쇠 잠그고)
 		mutex.Lock()
 		for clientChan := range clients {
-			// 3. 각 사용자에게 메시지 전송 (Non-blocking)
-			// 듣지 않는 사용자가 있어도 멈추지 않고 패스함
 			select {
-			case clientChan <- msg:
+			case clientChan <- msg: // 각 사용자 채널에 전송
 			default:
-				// 너무 느린 사용자는 명부에서 지울 수도 있음 (여기선 생략)
+				// 전송 실패 시(채널 꽉 참 등) 건너뜀 (Non-blocking)
 			}
 		}
 		mutex.Unlock()
@@ -92,56 +87,61 @@ func initNATS() {
 	nc, err = nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
 	if err != nil { log.Fatal(err) }
 	
-	// [변경] 비동기 구독 (Async Subscribe)
-	// 메시지가 오면 즉시 broadcast 채널로 던져버림
+	// [구독] 서버는 NATS에 딱 한 번만 구독함
+	// 메시지가 오면 broadcast 채널로 던짐
 	nc.Subscribe("chat.global", func(m *nats.Msg) {
 		broadcast <- string(m.Data)
 	})
 	
-	log.Println("✅ Connected to NATS & Listening...")
+	log.Println("✅ Connected to NATS & Listening (Hub Mode)...")
 }
 
-// [변경] 스트림 핸들러: NATS 구독 안 함 -> Hub에 등록만 함
+// [스트림 핸들러] 사용자가 웹소켓(SSE) 연결을 요청할 때
 func streamHandler(w http.ResponseWriter, r *http.Request) {
+	// 닉네임 파싱 (로그용)
+	nick := r.URL.Query().Get("nick")
+	if nick == "" { nick = "Unknown" }
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// 1. 내 전용 채널 생성
-	myChan := make(chan string, 10) // 버퍼를 줘서 약간의 여유를 둠
-
-	// 2. 명부에 등록 (입장)
+	// 내 전용 채널 생성 및 등록
+	myChan := make(chan string, 10)
+	
 	mutex.Lock()
 	clients[myChan] = true
 	mutex.Unlock()
 
-	// 3. 나가면 명부에서 삭제 (퇴장)
+	// [로그] 접속 알림
+	log.Printf("🔌 Connected: User [%s] attached to Pod [%s]", nick, hostname)
+
+	// 연결 종료 시 처리 (defer)
 	defer func() {
 		mutex.Lock()
-		delete(clients, myChan)
-		close(myChan)
+		delete(clients, myChan) // 명부에서 삭제
+		close(myChan)           // 채널 닫기
 		mutex.Unlock()
+		
+		// [로그] 퇴장 알림
+		log.Printf("❌ Disconnected: User [%s] detached from Pod [%s]", nick, hostname)
 	}()
 
 	notify := r.Context().Done()
 
 	for {
 		select {
-		case <-notify:
-			return // 브라우저 끄면 종료
-		case msg := <-myChan:
-			// 4. 방송실에서 내 채널로 넣어준 메시지를 화면에 씀
+		case <-notify: // 브라우저 종료 시
+			return
+		case msg := <-myChan: // 방송실에서 메시지 도착
 			fmt.Fprintf(w, "data: %s\n\n", msg)
 			w.(http.Flusher).Flush()
-		case <-time.After(15 * time.Second):
-			// 5. 15초간 조용하면 생존신고 (KeepAlive)
+		case <-time.After(15 * time.Second): // 15초간 조용하면 생존신고
 			fmt.Fprintf(w, ":keepalive\n\n")
 			w.(http.Flusher).Flush()
 		}
 	}
 }
-
-// --- 아래는 기존과 동일하거나 DB 관련 로직 ---
 
 func initDB() {
 	dbHost := os.Getenv("DB_HOST")
@@ -161,8 +161,8 @@ func initDB() {
 	connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbUser, dbPwd, dbName)
 	db, err = sql.Open("postgres", connStr)
 	if err != nil { log.Fatal(err) }
-	if err := db.Ping(); err != nil { log.Fatal(err) }
-
+	
+	// 테이블 생성 (기존 유지)
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS messages (
 			id SERIAL PRIMARY KEY,
@@ -200,6 +200,7 @@ func updateProfileHandler(w http.ResponseWriter, r *http.Request) {
 	color := r.FormValue("color")
 	if nickname == "" { return }
 	if color == "" { color = "#ffffff" }
+
 	_, err := db.Exec(`
 		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
 		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
@@ -218,9 +219,12 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 		FROM messages m
 		LEFT JOIN users u ON m.sender_nick = u.nickname
 	`
+
 	var rows *sql.Rows
 	var err error
+
 	if beforeIDStr != "" {
+		// [여기서 strconv 사용됨]
 		beforeID, _ := strconv.Atoi(beforeIDStr)
 		query := baseQuery + " WHERE m.id < $1 ORDER BY m.id DESC LIMIT $2"
 		rows, err = db.Query(query, beforeID, limit)
@@ -228,6 +232,7 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 		query := baseQuery + " ORDER BY m.id DESC LIMIT $1"
 		rows, err = db.Query(query, limit)
 	}
+
 	if err != nil { http.Error(w, err.Error(), 500); return }
 	defer rows.Close()
 
@@ -246,24 +251,26 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 	content := r.FormValue("msg")
 	nickname := r.FormValue("nick")
 	color := r.FormValue("color")
+
 	if content == "" || nickname == "" { return }
 	if color == "" { color = "#ffffff" }
 
-	// DB 저장
-	_, err := db.Exec(`
+	// 1. 유저 정보 저장 (UPSERT)
+	db.Exec(`
 		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
 		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
 		nickname, color)
 	
+	// 2. 메시지 저장
 	var id int
-	err = db.QueryRow(
+	err := db.QueryRow(
 		"INSERT INTO messages (content, sender_pod, sender_nick) VALUES ($1, $2, $3) RETURNING id",
 		content, hostname, nickname,
 	).Scan(&id)
 	
 	if err != nil { http.Error(w, err.Error(), 500); return }
 
-	// NATS 전송
+	// 3. NATS로 전송 (이제 이건 서버들끼리만 듣는 방송)
 	msg := Message{
 		ID: id, Content: content, SenderPod: hostname, SenderNick: nickname, SenderColor: color,
 		Time: time.Now().Format("15:04:05"),
