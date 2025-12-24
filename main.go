@@ -11,7 +11,8 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-var js nats.JetStreamContext
+// JetStreamContext 삭제 (nc만 사용)
+var nc *nats.Conn
 var hostname string
 
 type Message struct {
@@ -29,33 +30,22 @@ func main() {
 	}
 	hostname, _ = os.Hostname()
 
-	// 2. NATS 연결 (재시도 로직 포함)
-	nc, err := nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
+	// 2. NATS 연결 (Core NATS)
+	var err error
+	nc, err = nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("NATS Connect Error: ", err)
 	}
 	defer nc.Close()
+	
+	log.Println("✅ Connected to NATS Core (Pub/Sub Mode)")
 
-	// 3. JetStream 컨텍스트 생성 (데이터 저장을 위해 필수!)
-	js, err = nc.JetStream()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// 3. JetStream 설정 단계 삭제 (Stream 생성 코드 삭제)
 
-	// 4. 스트림 생성 (채팅방 같은 저장소 개념, 없으면 만듦)
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:     "COTALK",
-		Subjects: []string{"chat.>"},
-		Storage:  nats.FileStorage, // 파일에 저장해야 Pod 죽어도 남음
-	})
-	if err != nil {
-		log.Printf("Stream setup check: %v", err)
-	}
-
-	// 5. 웹 핸들러 등록
-	http.Handle("/", http.FileServer(http.Dir("./static"))) // HTML 파일 서빙
-	http.HandleFunc("/stream", streamHandler)               // 실시간 수신 (SSE)
-	http.HandleFunc("/send", sendHandler)                   // 메시지 전송
+	// 4. 웹 핸들러 등록
+	http.Handle("/", http.FileServer(http.Dir("./static")))
+	http.HandleFunc("/stream", streamHandler)
+	http.HandleFunc("/send", sendHandler)
 
 	port := "8080"
 	log.Printf("🥤 CoTalk Server started on %s (Pod: %s)", port, hostname)
@@ -81,9 +71,9 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data, _ := json.Marshal(msg)
 
-	// NATS JetStream에 저장 (Publish)
-	// chat.global이라는 주제로 보냄
-	_, err := js.Publish("chat.global", data)
+	// [변경] js.Publish -> nc.Publish (Core NATS)
+	// 저장 없이 구독자들에게 바로 쏘고 끝냅니다.
+	err := nc.Publish("chat.global", data)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -93,35 +83,43 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 
 // 실시간 스트림 핸들러 (SSE)
 func streamHandler(w http.ResponseWriter, r *http.Request) {
-	// SSE 헤더 설정
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// NATS 구독 (지난 대화도 다 보내달라고 설정: DeliverAll)
-	sub, err := js.SubscribeSync("chat.global", nats.DeliverAll())
+	// [변경] js.SubscribeSync -> nc.SubscribeSync (Core NATS)
+	// 옵션(DeliverAll) 같은 거 없습니다. 지금부터 오는 것만 듣습니다.
+	sub, err := nc.SubscribeSync("chat.global")
 	if err != nil {
-		log.Println(err)
+		log.Println("Subscribe Error:", err)
 		return
 	}
 	defer sub.Unsubscribe()
 
-	// 클라이언트 접속 끊길 때까지 루프
-	for {
-		// 1초 기다리며 메시지 확인
-		m, err := sub.NextMsg(1 * time.Second)
-		if err == nats.ErrTimeout {
-			// 메시지 없으면 빈 값 보내서 연결 유지 (Heartbeat)
-			fmt.Fprintf(w, ":keepalive\n\n")
-			w.(http.Flusher).Flush()
-			continue
-		}
-		if err != nil {
-			break
-		}
+	// 클라이언트가 끊을 때 감지하기 위한 채널
+	notify := r.Context().Done()
 
-		// 메시지 있으면 브라우저로 전송
-		fmt.Fprintf(w, "data: %s\n\n", string(m.Data))
-		w.(http.Flusher).Flush()
+	for {
+		select {
+		case <-notify:
+			// 브라우저 끄면 루프 종료
+			return
+		default:
+			// 1초 기다리며 메시지 확인
+			m, err := sub.NextMsg(1 * time.Second)
+			if err == nats.ErrTimeout {
+				fmt.Fprintf(w, ":keepalive\n\n")
+				w.(http.Flusher).Flush()
+				continue
+			}
+			if err != nil {
+				// 연결 에러 시 종료
+				return
+			}
+
+			// 메시지 전송
+			fmt.Fprintf(w, "data: %s\n\n", string(m.Data))
+			w.(http.Flusher).Flush()
+		}
 	}
 }
