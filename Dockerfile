@@ -20,7 +20,7 @@ RUN npm run build
 # ==========================================
 
 # 빌드 스테이지
-FROM golang:1.25 AS builder
+FROM golang:1.25 AS backend-builder
 WORKDIR /app/backend
 
 # [중요] go.mod와 go.sum을 먼저 복사해야 라이브러리를 받을 수 있음
