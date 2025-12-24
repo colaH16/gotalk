@@ -41,7 +41,7 @@
                     <span class="font-bold" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></span>
                 </div>
                 
-                <div class="chat-bubble text-sm shadow-sm min-h-0 pt-1.5 pb-0.5 px-3 leading-snug break-all" 
+                <div class="chat-bubble text-sm shadow-sm min-h-0 pt-1 pb-0 px-3 leading-snug break-all" 
                      :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
                      :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
                     <span x-text="msg.content"></span>
