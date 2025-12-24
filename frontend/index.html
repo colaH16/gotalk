@@ -37,19 +37,16 @@
                 
                 <div class="chat-header text-[10px] opacity-50 mb-0.5 flex items-end gap-1 leading-none" 
                      :class="msg.sender_nick === myNick ? 'flex-row-reverse' : ''">
-                    
                     <time class="opacity-70" x-text="msg.time"></time>
-                    
                     <span class="font-bold" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></span>
                 </div>
                 
-                <div class="chat-bubble text-sm shadow-sm min-h-0 py-1 px-3 leading-snug break-all" 
+                <div class="chat-bubble text-sm shadow-sm min-h-0 pt-1.5 pb-0.5 px-3 leading-snug break-all" 
                      :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
                      :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
                     <span x-text="msg.content"></span>
                 </div>
-                
-                </div>
+            </div>
         </template>
     </div>
 
@@ -207,7 +204,7 @@
                     evtSource.onerror = (err) => {
                         console.error("SSE Error:", err);
                         evtSource.close();
-                        setTimeout(() => this.connectSSE(), 300); // 0.3초 재연결 유지
+                        setTimeout(() => this.connectSSE(), 300);
                     };
                 },
 
