@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv" // [추가됨] 이게 빠져서 에러가 났었습니다!
+	"strconv"
 	"sync"
 	"time"
 
@@ -19,13 +19,14 @@ var (
 	nc       *nats.Conn
 	db       *sql.DB
 	hostname string
-
-	// [Hub 패턴] 사용자 관리 및 방송용 변수들
-	clients   = make(map[chan string]bool) // 접속한 클라이언트 목록
-	broadcast = make(chan string)          // 방송 대기열
-	mutex     = sync.Mutex{}               // 동시성 제어용 자물쇠
+	
+	// [수정] 채널 버퍼를 늘려 막힘 방지
+	clients   = make(map[chan string]bool)
+	broadcast = make(chan string, 100) 
+	mutex     = sync.Mutex{}
 )
 
+// (Message, User 구조체는 동일)
 type Message struct {
 	ID          int    `json:"id"`
 	Content     string `json:"content"`
@@ -40,12 +41,16 @@ type User struct {
 	ColorCode string `json:"color_code"`
 }
 
+type User struct {
+	Nickname  string `json:"nickname"`
+	ColorCode string `json:"color_code"`
+}
+
 func main() {
 	hostname, _ = os.Hostname()
 	initDB()
 	initNATS()
 
-	// [방송실 가동] 들어오는 메시지를 사용자들에게 뿌리는 고루틴 실행
 	go handleMessages()
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))
@@ -65,31 +70,40 @@ func main() {
 // [방송실] NATS에서 받은 메시지를 현재 접속한 모든 사용자에게 전달
 func handleMessages() {
 	for {
-		msg := <-broadcast // 메시지가 올 때까지 대기
+		msg := <-broadcast
+		// [로그] 방송실이 메시지를 수신했는지 확인
+		log.Printf("📢 [Broadcaster] Broadcasting message to clients...")
 		
 		mutex.Lock()
+		count := 0
 		for clientChan := range clients {
 			select {
-			case clientChan <- msg: // 각 사용자 채널에 전송
+			case clientChan <- msg:
+				count++
 			default:
-				// 전송 실패 시(채널 꽉 참 등) 건너뜀 (Non-blocking)
 			}
 		}
 		mutex.Unlock()
+		log.Printf("✅ [Broadcaster] Sent to %d clients.", count)
 	}
 }
 
 func initNATS() {
 	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" { natsURL = nats.DefaultURL }
+	if natsURL == "" { 
+		natsURL = nats.DefaultURL 
+		log.Println("⚠️ Warning: NATS_URL not set. Using default: " + natsURL)
+	} else {
+		log.Println("🔗 Connecting to NATS at: " + natsURL)
+	}
 	
 	var err error
 	nc, err = nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
-	if err != nil { log.Fatal(err) }
+	if err != nil { log.Fatal("❌ NATS Connect Error: ", err) }
 	
-	// [구독] 서버는 NATS에 딱 한 번만 구독함
-	// 메시지가 오면 broadcast 채널로 던짐
+	// [로그] NATS 구독 확인
 	nc.Subscribe("chat.global", func(m *nats.Msg) {
+		log.Printf("📨 [NATS Listener] Received msg from NATS: %s", string(m.Data))
 		broadcast <- string(m.Data)
 	})
 	

@@ -1,6 +1,7 @@
 module.exports = {
-  // 현재 폴더(frontend) 아래의 모든 html, js 파일을 보겠다는 뜻
-  content: ["./**/*.{html,js}"], 
+  // [수정] 별이 하나(*)입니다!
+  // 의미: "현재 폴더(./)에 있는 html이나 js 파일만 봐라."
+  content: ["./*.{html,js}"], 
   theme: {
     extend: {},
   },
