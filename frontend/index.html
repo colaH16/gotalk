@@ -5,8 +5,7 @@
     <title>CoTalk 🥤</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="/output.css" rel="stylesheet">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
@@ -14,62 +13,57 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 말풍선 애니메이션 */
         @keyframes popIn {
-            0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+            0% { opacity: 0; transform: translateY(10px) scale(0.95); }
             100% { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .msg-anim { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .msg-anim { animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     </style>
 </head>
 
 <body x-data="appData()" x-init="initApp()" class="bg-blue-100 h-[100dvh] flex flex-col max-w-md mx-auto shadow-2xl relative">
 
-    <header class="bg-yellow-300 p-3 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-center items-center h-12">
+    <header class="bg-yellow-300 p-3 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-center items-center h-12 shrink-0">
         <span>CoTalk 🥤 <span x-text="myNick ? `(${myNick})` : ''" class="text-xs font-normal"></span></span>
     </header>
 
-    <div id="chat-box" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 bg-[#b2c7d9]">
-        <div x-show="hasMore" class="text-center py-2">
-            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full">⬆ 더 불러오기</button>
+    <div id="chat-box" class="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5 bg-[#b2c7d9]">
+        <div x-show="hasMore" class="text-center py-2 shrink-0">
+            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full h-6 min-h-0">⬆ 더 불러오기</button>
         </div>
 
         <template x-for="msg in messages" :key="msg.id">
-            <div :id="'msg-'+msg.id" class="chat msg-anim" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
+            <div :id="'msg-'+msg.id" class="chat msg-anim mb-0" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
                 
-                <div class="chat-header text-xs opacity-50 ml-1" x-show="msg.sender_nick !== myNick">
+                <div class="chat-header text-[10px] opacity-50 ml-1 mb-0.5 leading-none" x-show="msg.sender_nick !== myNick">
                     <span x-text="msg.sender_nick"></span>
-                    <time class="text-[9px] opacity-70 ml-1" x-text="msg.time"></time>
                 </div>
                 
-                <div class="chat-bubble text-sm shadow-sm" 
+                <div class="chat-bubble text-sm shadow-sm min-h-0 py-1.5 px-3 leading-relaxed break-all" 
                      :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
                      :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
                     <span x-text="msg.content"></span>
                 </div>
                 
-                <div class="chat-footer opacity-50 text-[9px] mr-1" x-show="msg.sender_nick === myNick">
-                    <time x-text="msg.time"></time>
-                </div>
+                <div class="chat-footer opacity-50 text-[9px] mt-0.5 leading-none" x-text="msg.time"></div>
             </div>
         </template>
     </div>
 
     <div x-show="showSettings" @click.outside="showSettings = false" x-transition 
-         class="absolute bottom-16 left-2 w-64 bg-white rounded-xl shadow-xl p-4 z-30 border border-gray-200">
+         class="absolute bottom-16 left-2 w-64 bg-white rounded-xl shadow-xl p-4 z-30 border border-gray-200" style="display: none;">
         <h3 class="font-bold text-sm mb-3">설정 ⚙️</h3>
         <div class="form-control w-full mb-4">
             <label class="label py-1"><span class="label-text text-xs font-medium">내 말풍선 색상</span></label>
             <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-9 cursor-pointer rounded-md border border-gray-300 p-1">
         </div>
-        <button @click="changeNickname()" class="btn btn-sm btn-error w-full text-white">로그아웃 (닉네임 변경)</button>
+        <button @click="changeNickname()" class="btn btn-sm btn-error w-full text-white">로그아웃</button>
     </div>
 
-    <div class="bg-white p-2 border-t border-gray-200 flex items-center gap-2 relative z-20">
+    <div class="bg-white p-2 border-t border-gray-200 flex items-center gap-2 relative z-20 shrink-0">
         <button @click="showSettings = !showSettings" class="btn btn-sm btn-circle btn-ghost text-gray-500">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.332.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.217.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.583-.495.645-.869l.214-1.281z" />
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.43.811 1.035.811 1.73 0 .695-.316 1.3-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
             </svg>
         </button>
 
@@ -125,7 +119,7 @@
                             window.scrollTo(0, 0);
                         };
                         window.visualViewport.addEventListener('resize', resizeHandler);
-                        resizeHandler(); // 초기 실행
+                        resizeHandler();
                     }
                 },
 
@@ -142,7 +136,7 @@
                 async checkServerColor(nick) {
                     try {
                         const res = await fetch(`/login?nick=${encodeURIComponent(nick)}`);
-                        if (!res.ok) throw new Error('Login fetch failed');
+                        if (!res.ok) throw new Error('Login failed');
                         const data = await res.json();
                         if (data.color_code) this.myColor = data.color_code;
                         localStorage.setItem('cotalk_color', this.myColor);
@@ -157,11 +151,8 @@
                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                             body: `nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
                         });
-                        location.reload(); // 색상 변경 후 전체 새로고침
-                    } catch(e) { 
-                        console.error("Color update failed", e);
-                        alert("색상 변경에 실패했습니다.");
-                    }
+                        location.reload();
+                    } catch(e) { console.error(e); }
                 },
 
                 changeNickname() {
@@ -179,14 +170,16 @@
                     
                     try {
                         const res = await fetch(url);
-                        if (!res.ok) throw new Error('History fetch failed');
                         const history = await res.json();
                         
                         if (history && history.length > 0) {
                             this.minID = history[history.length - 1].id;
                             this.hasMore = true;
+                            // 과거 메시지는 역순으로 정렬하여 앞에 붙임
                             const sortedHistory = history.reverse();
                             const newMsgs = sortedHistory.filter(h => !this.messages.some(m => m.id === h.id));
+                            
+                            // [핵심] 배열 재할당으로 반응성 보장
                             this.messages = [...newMsgs, ...this.messages];
                             
                             if (url === '/history') {
@@ -196,37 +189,52 @@
                             this.hasMore = false;
                         }
                     } catch (e) { 
-                        console.error(e);
-                        this.hasMore = false;
+                        this.hasMore = false; 
                     } finally {
                         this.isLoading = false;
                     }
                 },
 
                 connectSSE() {
+                    console.log("Connecting SSE...");
                     const evtSource = new EventSource("/stream");
+                    
                     evtSource.onmessage = (e) => {
+                        // 하트비트(:keepalive) 무시
+                        if (e.data === ":keepalive") return;
+
                         const data = JSON.parse(e.data);
+                        console.log("SSE Msg Received:", data); // 디버깅용 로그
+
                         if (this.messages.some(m => m.id === data.id)) return;
+                        
+                        // [핵심] 새 메시지 도착 시 push 후 화면 갱신 강제
                         this.messages.push(data);
+                        
+                        // 스크롤 이동
                         this.$nextTick(this.scrollToBottom);
                     };
-                    evtSource.onerror = (err) => { console.log("SSE connection error, retrying...", err); };
+
+                    // 연결 끊기면 자동 재연결 시도
+                    evtSource.onerror = (err) => {
+                        console.error("SSE Error:", err);
+                        evtSource.close();
+                        setTimeout(() => this.connectSSE(), 300); // 0.3초 뒤 재연결
+                    };
                 },
 
                 sendMessage() {
                     if (!this.inputMsg.trim()) return;
                     const msgToSend = this.inputMsg;
-                    this.inputMsg = ''; // 먼저 비움
+                    this.inputMsg = '';
                     
                     fetch('/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: `msg=${encodeURIComponent(msgToSend)}&nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
                     }).catch(e => {
-                        console.error("Send failed", e);
-                        this.inputMsg = msgToSend; // 실패 시 복구 (선택사항)
-                        alert("메시지 전송 실패");
+                        alert("전송 실패");
+                        this.inputMsg = msgToSend;
                     });
                 },
 
