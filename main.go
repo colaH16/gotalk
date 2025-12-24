@@ -23,7 +23,7 @@ type Message struct {
 	Content     string `json:"content"`
 	SenderPod   string `json:"sender_pod"`
 	SenderNick  string `json:"sender_nick"`
-	SenderColor string `json:"sender_color"` // DB엔 없지만 JSON 응답용으로 존재
+	SenderColor string `json:"sender_color"`
 	Time        string `json:"time"`
 }
 
@@ -42,6 +42,7 @@ func main() {
 	http.HandleFunc("/send", sendHandler)
 	http.HandleFunc("/history", historyHandler)
 	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/update", updateProfileHandler) // [추가] 프로필 업데이트용
 
 	port := "8080"
 	log.Printf("🥤 CoTalk Server started on %s (Pod: %s)", port, hostname)
@@ -57,7 +58,6 @@ func initDB() {
 	dbName := os.Getenv("DB_NAME")
 	if dbName == "" { dbName = "cotalk" }
 
-	// 1. Temp DB 접속 및 생성
 	psqlInfo := fmt.Sprintf("host=%s user=%s password=%s dbname=postgres sslmode=disable", dbHost, dbUser, dbPwd)
 	tempDB, err := sql.Open("postgres", psqlInfo)
 	if err != nil { log.Fatal(err) }
@@ -66,14 +66,11 @@ func initDB() {
 	if !exists { tempDB.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName)) }
 	tempDB.Close()
 
-	// 2. 실제 DB 접속
 	connStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbUser, dbPwd, dbName)
 	db, err = sql.Open("postgres", connStr)
 	if err != nil { log.Fatal(err) }
 	if err := db.Ping(); err != nil { log.Fatal(err) }
 
-	// 3. 테이블 생성
-	// [변경] messages 테이블에서 sender_color 제거! (닉네임으로 조인할거니까)
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS messages (
 			id SERIAL PRIMARY KEY,
@@ -118,20 +115,39 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// [핵심 변경] JOIN 쿼리 사용
+// [추가] 닉네임이나 색상만 변경하고 싶을 때 사용
+func updateProfileHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost { return }
+	nickname := r.FormValue("nick")
+	color := r.FormValue("color")
+
+	if nickname == "" { return }
+	if color == "" { color = "#ffffff" }
+
+	// DB 업데이트 (UPSERT)
+	_, err := db.Exec(`
+		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
+		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
+		nickname, color)
+	
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func historyHandler(w http.ResponseWriter, r *http.Request) {
 	beforeIDStr := r.URL.Query().Get("before_id")
 	limit := 30 
 
-	// messages 테이블(m)과 users 테이블(u)을 닉네임 기준으로 합침(LEFT JOIN)
-	// 메세지 저장 당시의 색이 아니라, '현재 users 테이블에 있는 색'을 가져옴
 	baseQuery := `
 		SELECT 
 			m.id, 
 			m.content, 
 			m.sender_pod, 
 			m.sender_nick, 
-			COALESCE(u.color_code, '#ffffff'), -- 색 없으면 흰색
+			COALESCE(u.color_code, '#ffffff'),
 			to_char(m.created_at, 'HH24:MI:SS') 
 		FROM messages m
 		LEFT JOIN users u ON m.sender_nick = u.nickname
@@ -158,7 +174,6 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 	var history []Message
 	for rows.Next() {
 		var m Message
-		// Scan 순서: id, content, pod, nick, color(JOIN된 것), time
 		rows.Scan(&m.ID, &m.Content, &m.SenderPod, &m.SenderNick, &m.SenderColor, &m.Time)
 		history = append(history, m)
 	}
@@ -171,19 +186,19 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost { return }
 	content := r.FormValue("msg")
 	nickname := r.FormValue("nick")
-	color := r.FormValue("color")
+	color := r.FormValue("color") // 현재 클라이언트가 선택한 색상
 
 	if content == "" || nickname == "" { return }
 	if color == "" { color = "#ffffff" }
 
-	// 1. Users 테이블에 사용자 색상 정보 저장/업데이트 (가장 최신 색상 유지)
+	// 1. Users 테이블 업데이트 (메세지 보낼 때도 색상 동기화)
 	_, err := db.Exec(`
 		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
 		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
 		nickname, color)
 	if err != nil { log.Println("User Update Error:", err) }
 
-	// 2. Messages 테이블 저장 (색상 컬럼 없음! 내용만 저장)
+	// 2. Messages 테이블 저장
 	var id int
 	err = db.QueryRow(
 		"INSERT INTO messages (content, sender_pod, sender_nick) VALUES ($1, $2, $3) RETURNING id",
@@ -195,14 +210,13 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. NATS 전송
-	// 실시간 전송 시에는 JOIN을 할 수 없으니, 방금 받은 정보를 그대로 실어서 보냄
+	// 3. NATS 전송 (여기서는 즉시 반영을 위해 보낸 색상을 그대로 실어보냄)
 	msg := Message{
 		ID:          id,
 		Content:     content,
 		SenderPod:   hostname,
 		SenderNick:  nickname,
-		SenderColor: color, // NATS 메세지엔 색상을 담아서 보냄 (즉시 반영용)
+		SenderColor: color,
 		Time:        time.Now().Format("15:04:05"),
 	}
 	data, _ := json.Marshal(msg)

@@ -36,7 +36,7 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            scroll-behavior: auto; /* JS 스크롤 제어를 위해 auto로 변경 */
+            scroll-behavior: auto;
         }
 
         #load-more-btn {
@@ -52,7 +52,15 @@
             display: none; 
         }
 
-        .msg-row { display: flex; flex-direction: column; max-width: 70%; }
+        /* 메시지 행 스타일 */
+        .msg-row { 
+            display: flex; 
+            flex-direction: column; 
+            max-width: 70%; 
+            /* 기본은 왼쪽 정렬 */
+            align-self: flex-start;
+        }
+
         .nick { font-size: 12px; color: #555; margin-bottom: 4px; margin-left: 2px; }
         .bubble {
             padding: 8px 12px;
@@ -64,10 +72,18 @@
         }
         .time { font-size: 10px; color: #555; margin: 0 4px; align-self: flex-end; white-space: nowrap; }
         
-        .msg-row.other { align-self: flex-start; }
+        /* 상대방 메시지 */
+        .msg-row.other { 
+            align-self: flex-start; 
+        }
         .msg-row.other .bubble { border-top-left-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         
-        .msg-row.my { align-self: flex-end; align-items: flex-end; }
+        /* [수정] 내 메시지 (오른쪽 정렬 강화) */
+        .msg-row.my { 
+            align-self: flex-end; 
+            align-items: flex-end;
+            margin-left: auto; /* 이것이 오른쪽 끝으로 미는 핵심입니다 */
+        }
         .msg-row.my .nick { display: none; }
         .msg-row.my .bubble { border-top-right-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .bubble-wrap { display: flex; align-items: flex-end; }
@@ -144,7 +160,7 @@
         </div>
 
         <div id="settings-menu">
-            <label style="font-size:12px; color:#666;">내 말풍선 색상</label>
+            <label style="font-size:12px; color:#666;">내 말풍선 색상 (변경 시 새로고침)</label>
             <input type="color" id="color-picker" style="width:100%; height:30px; border:none;">
             <button onclick="changeNickname()">닉네임 변경 (로그아웃)</button>
         </div>
@@ -164,18 +180,11 @@
         let myColor = localStorage.getItem('cotalk_color') || '#fef01b';
         let minID = -1;
 
-        // [수정됨] 키보드 뷰포트 대응 강화
         const viewportHandler = () => {
             if (window.visualViewport) {
                 const height = window.visualViewport.height;
-                const offsetTop = window.visualViewport.offsetTop;
-                
-                // 앱 높이를 보이는 영역에 맞춤
                 document.getElementById('app').style.height = `${height}px`;
-                // 필요한 경우 상단으로 밀어줌 (iOS Safari 대응)
                 window.scrollTo(0, 0); 
-                
-                // 입력 중일 때 스크롤 확보
                 if(document.activeElement.tagName === 'INPUT') {
                     setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
                 }
@@ -232,10 +241,28 @@
             menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
         }
 
-        document.getElementById('color-picker').addEventListener('change', (e) => {
-            myColor = e.target.value;
-            localStorage.setItem('cotalk_color', myColor);
-            toggleSettings();
+        // [핵심 변경] 색상 변경 시 -> DB 저장 -> 새로고침
+        document.getElementById('color-picker').addEventListener('change', async (e) => {
+            const newColor = e.target.value;
+            
+            // 1. 로컬 저장
+            localStorage.setItem('cotalk_color', newColor);
+            
+            // 2. 서버 DB에 즉시 업데이트 요청
+            try {
+                await fetch('/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `nick=${encodeURIComponent(myNick)}&color=${encodeURIComponent(newColor)}`
+                });
+                
+                // 3. 성공하면 페이지 새로고침 (과거 메세지 색상 반영을 위해)
+                location.reload();
+                
+            } catch(err) {
+                console.error("Color Update Failed", err);
+                alert("색상 변경 중 오류가 발생했습니다.");
+            }
         });
 
         function changeNickname() {
@@ -253,18 +280,15 @@
 
             try {
                 const res = await fetch(url);
-                if (!res.ok) throw new Error('History Fetch Failed'); // 500 에러 체크
+                if (!res.ok) throw new Error('History Fetch Failed');
                 
                 const history = await res.json();
                 if (history && history.length > 0) {
                     minID = history[history.length - 1].id;
                     loadBtn.style.display = 'block';
 
-                    // 역순(DESC) 데이터를 하나씩 insertBefore로 맨 위에 쌓음 (결과적으로 시간순 정렬됨)
                     history.forEach(msg => {
-                        // 중복 체크 (이미 있으면 스킵)
                         if (document.getElementById(`msg-${msg.id}`)) return;
-                        
                         const row = createMsgRow(msg);
                         msgList.insertBefore(row, msgList.firstChild);
                     });
@@ -285,12 +309,7 @@
             evtSource.onmessage = function(e) {
                 try {
                     const data = JSON.parse(e.data);
-                    
-                    // [핵심] 중복 방지: 이미 화면에 있는 ID면 무시
-                    if (document.getElementById(`msg-${data.id}`)) {
-                        console.log("Duplicate skipped:", data.id);
-                        return; 
-                    }
+                    if (document.getElementById(`msg-${data.id}`)) return; 
 
                     const row = createMsgRow(data);
                     msgList.appendChild(row);
@@ -299,21 +318,16 @@
                     console.error("SSE Parse Error", err);
                 }
             };
-            
-            evtSource.onerror = function() {
-                // 연결 끊기면 자동 재연결 시도 (EventSource가 알아서 하지만 로깅용)
-                console.log("SSE disconnected, reconnecting...");
-            };
         }
 
         function createMsgRow(data) {
             const isMe = data.sender_nick === myNick;
             const row = document.createElement('div');
-            
-            // [핵심] ID 부여 (중복 체크용)
             row.id = `msg-${data.id}`; 
             
             row.className = `msg-row ${isMe ? 'my' : 'other'}`;
+            
+            // 내가 쓴 글이면 내 설정색(즉시반영), 남이 쓴 글이면 DB색
             const bubbleColor = isMe ? myColor : (data.sender_color || '#ffffff');
             
             row.innerHTML = `
