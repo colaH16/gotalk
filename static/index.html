@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CoTalk 🥤</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 20px; }
+        #chat-box { height: 400px; border: 1px solid #ddd; overflow-y: scroll; padding: 10px; margin-bottom: 10px; border-radius: 8px; background: #f9f9f9; }
+        .msg { margin-bottom: 8px; padding: 5px; border-bottom: 1px solid #eee; }
+        .pod { font-size: 0.8em; color: #888; font-weight: bold; }
+        .time { font-size: 0.7em; color: #aaa; float: right; }
+        input { width: 70%; padding: 10px; }
+        button { width: 25%; padding: 10px; background: #222; color: #fff; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>CoTalk 🥤</h1>
+    <div id="chat-box"></div>
+    <form id="chat-form" onsubmit="sendMsg(event)">
+        <input type="text" id="msg" placeholder="메시지를 입력하세요..." autocomplete="off">
+        <button type="submit">전송</button>
+    </form>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        
+        // 1. 실시간 메시지 수신 (SSE)
+        const evtSource = new EventSource("/stream");
+        evtSource.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const div = document.createElement('div');
+            div.className = 'msg';
+            div.innerHTML = `<span class="pod">[Pod: ${data.sender_pod}]</span> ${data.content} <span class="time">${data.time}</span>`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight; // 자동 스크롤
+        };
+
+        // 2. 메시지 전송
+        function sendMsg(e) {
+            e.preventDefault();
+            const input = document.getElementById('msg');
+            fetch('/send?msg=' + encodeURIComponent(input.value), { method: 'POST' });
+            input.value = '';
+        }
+    </script>
+</body>
+</html>
