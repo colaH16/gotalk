@@ -20,6 +20,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # [중요 1] 이미지 이름을 소문자로 강제 변환 (colaH16 -> colah16)
+      - name: Lowercase Image Name
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -33,8 +38,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,format=long
-            latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            # [중요 2] 빌드할 때도 짧은 해시(sha-xxxxxxx)로 생성하게 통일
+            type=sha,format=short
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
@@ -61,17 +67,19 @@ jobs:
           NEW_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
           echo "Updating image tag to: $NEW_TAG"
 
-          # 4. [핵심] deploy.yaml 파일 수정 (경로: application-golang/deploy.yaml)
-          # 정규식 설명: "image: ghcr.io/내아이디/gotalk:어쩌구" 를 찾아서 -> ":새태그"로 교체
-          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}:.*|image: ghcr.io/${{ env.IMAGE_NAME }}:$NEW_TAG|g" application-golang/deploy.yaml
+          # 4. 대상 파일 경로 설정
+          TARGET_FILE="application-golang/deploy.yaml"
 
           # 5. 변경 사항 확인 및 푸시
           # 경로가 깊어졌으니 해당 파일이 있는지 체크하고 add 합니다.
-          if [ -f "application-golang/deploy.yaml" ]; then
-            git add application-golang/deploy.yaml
+          if [ -f "$TARGET_FILE" ]; then
+            # 이미지 이름도 소문자로 매칭해서 변경
+            sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}:.*|image: ghcr.io/${{ env.IMAGE_NAME }}:$NEW_TAG|g" $TARGET_FILE
+            
+            git add $TARGET_FILE
             git commit -m "Update image tag to $NEW_TAG [skip ci]" || echo "No changes to commit"
             git push origin main
           else
-            echo "Error: application-golang/deploy.yaml 파일을 찾을 수 없습니다!"
+            echo "Error: $TARGET_FILE 파일을 찾을 수 없습니다!"
             exit 1
           fi
