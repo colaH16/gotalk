@@ -61,17 +61,17 @@ jobs:
           NEW_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
           echo "Updating image tag to: $NEW_TAG"
 
-          # 4. [핵심] deploy.yaml 파일 수정 (경로: gotalk/application-golang/deploy.yaml)
+          # 4. [핵심] deploy.yaml 파일 수정 (경로: gotalk-gitops/application-golang/deploy.yaml)
           # 정규식 설명: "image: ghcr.io/내아이디/gotalk:어쩌구" 를 찾아서 -> ":새태그"로 교체
-          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}:.*|image: ghcr.io/${{ env.IMAGE_NAME }}:$NEW_TAG|g" gotalk/application-golang/deploy.yaml
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}:.*|image: ghcr.io/${{ env.IMAGE_NAME }}:$NEW_TAG|g" gotalk-gitops/application-golang/deploy.yaml
 
           # 5. 변경 사항 확인 및 푸시
           # 경로가 깊어졌으니 해당 파일이 있는지 체크하고 add 합니다.
-          if [ -f "gotalk/application-golang/deploy.yaml" ]; then
-            git add gotalk/application-golang/deploy.yaml
+          if [ -f "gotalk-gitops/application-golang/deploy.yaml" ]; then
+            git add gotalk-gitops/application-golang/deploy.yaml
             git commit -m "Update image tag to $NEW_TAG [skip ci]" || echo "No changes to commit"
             git push origin main
           else
-            echo "Error: gotalk/application-golang/deploy.yaml 파일을 찾을 수 없습니다!"
+            echo "Error: gotalk-gitops/application-golang/deploy.yaml 파일을 찾을 수 없습니다!"
             exit 1
           fi
