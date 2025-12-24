@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # 예: colaH16/gotalk
+  GITOPS_REPO: colaH16/gotalk-gitops     # [중요] GitOps 리포지토리 이름 확인하세요!
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            latest
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # --- GitOps 업데이트 단계 (경로 수정됨) ---
+      - name: Update Deployment YAML in GitOps Repo
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_PAT }}
+        run: |
+          # 1. Git 설정
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+          # 2. GitOps 리포지토리 클론
+          git clone https://x-access-token:${GH_TOKEN}@github.com/${{ env.GITOPS_REPO }}.git gitops-repo
+          cd gitops-repo
+
+          # 3. 새로운 이미지 태그 추출
+          NEW_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "Updating image tag to: $NEW_TAG"
+
+          # 4. [핵심] deploy.yaml 파일 수정 (경로: gotalk/application-golang/deploy.yaml)
+          # 정규식 설명: "image: ghcr.io/내아이디/gotalk:어쩌구" 를 찾아서 -> ":새태그"로 교체
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}:.*|image: ghcr.io/${{ env.IMAGE_NAME }}:$NEW_TAG|g" gotalk/application-golang/deploy.yaml
+
+          # 5. 변경 사항 확인 및 푸시
+          # 경로가 깊어졌으니 해당 파일이 있는지 체크하고 add 합니다.
+          if [ -f "gotalk/application-golang/deploy.yaml" ]; then
+            git add gotalk/application-golang/deploy.yaml
+            git commit -m "Update image tag to $NEW_TAG [skip ci]" || echo "No changes to commit"
+            git push origin main
+          else
+            echo "Error: gotalk/application-golang/deploy.yaml 파일을 찾을 수 없습니다!"
+            exit 1
+          fi
