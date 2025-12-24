@@ -1,23 +1,21 @@
 <!DOCTYPE html>
-<html lang="ko" data-theme="pastel"> <head>
+<html lang="ko" data-theme="pastel">
+<head>
     <meta charset="UTF-8">
     <title>CoTalk 🥤</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    /* <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script> */
+    <link href="/output.css" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
-        /* 폰트 및 기본 설정 */
         body { font-family: 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
         
-        /* 스크롤바 숨기기 (깔끔하게) */
+        /* 스크롤바 숨김 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 말풍선 애니메이션 */
+        /* 등장 애니메이션 */
         @keyframes popIn {
             0% { opacity: 0; transform: translateY(10px) scale(0.9); }
             100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -25,47 +23,49 @@
         .msg-anim { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     </style>
 </head>
+
 <body x-data="appData()" x-init="initApp()" class="bg-blue-100 h-[100dvh] flex flex-col max-w-md mx-auto shadow-2xl relative">
 
-    <header class="bg-yellow-300 p-4 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-between items-center">
+    <header class="bg-yellow-300 p-3 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-between items-center h-12">
         <span>CoTalk 🥤 <span x-text="myNick ? `(${myNick})` : ''" class="text-xs font-normal"></span></span>
         <button @click="showSettings = !showSettings" class="btn btn-ghost btn-circle btn-sm">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         </button>
     </header>
 
-    <div id="chat-box" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-[#b2c7d9]">
-        <div x-show="hasMore" class="text-center mb-2">
-            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full">⬆ 더 불러오기</button>
+    <div id="chat-box" class="flex-1 overflow-y-auto p-3 flex flex-col gap-1 bg-[#b2c7d9]">
+        <div x-show="hasMore" class="text-center py-2">
+            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full h-6 min-h-0">⬆ 더 불러오기</button>
         </div>
 
         <template x-for="msg in messages" :key="msg.id">
-            <div :id="'msg-'+msg.id" class="chat msg-anim" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
-                <div class="chat-header text-xs opacity-50 mb-1 ml-1" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></div>
+            <div :id="'msg-'+msg.id" class="chat msg-anim mb-0" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
                 
-                <div class="chat-bubble text-sm shadow-sm" 
+                <div class="chat-header text-[10px] opacity-50 mb-0.5 ml-1" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></div>
+                
+                <div class="chat-bubble text-sm shadow-sm min-h-0 py-2 px-3" 
                      :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
                      :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
                     <span x-text="msg.content"></span>
                 </div>
                 
-                <div class="chat-footer opacity-50 text-[10px] mt-1" x-text="msg.time"></div>
+                <div class="chat-footer opacity-50 text-[9px] mt-0.5" x-text="msg.time"></div>
             </div>
         </template>
     </div>
 
-    <div x-show="showSettings" @click.outside="showSettings = false" x-transition class="absolute bottom-20 right-4 w-64 bg-white rounded-xl shadow-xl p-4 z-20 border border-gray-200">
+    <div x-show="showSettings" @click.outside="showSettings = false" x-transition class="absolute bottom-16 right-4 w-60 bg-white rounded-xl shadow-xl p-4 z-20 border border-gray-200">
         <h3 class="font-bold text-sm mb-2">설정</h3>
-        <div class="form-control w-full max-w-xs mb-3">
-            <label class="label"><span class="label-text">내 말풍선 색상</span></label>
-            <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-8 cursor-pointer rounded">
+        <div class="form-control w-full mb-3">
+            <label class="label py-1"><span class="label-text text-xs">내 말풍선 색상</span></label>
+            <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-8 cursor-pointer rounded border border-gray-300">
         </div>
-        <button @click="changeNickname()" class="btn btn-sm btn-outline btn-error w-full">로그아웃 (닉네임 변경)</button>
+        <button @click="changeNickname()" class="btn btn-sm btn-outline btn-error w-full">로그아웃</button>
     </div>
 
-    <form @submit.prevent="sendMessage" class="bg-white p-3 flex gap-2 border-t border-gray-200 items-center">
-        <input type="text" x-model="inputMsg" placeholder="메시지 입력..." class="input input-bordered input-sm w-full rounded-full focus:outline-none" />
-        <button type="submit" class="btn btn-sm btn-circle bg-yellow-300 border-none text-gray-800 hover:bg-yellow-400">
+    <form @submit.prevent="sendMessage" class="bg-white p-2 flex gap-2 border-t border-gray-200 items-center">
+        <input type="text" x-model="inputMsg" placeholder="메시지 입력..." class="input input-bordered input-sm w-full rounded-full focus:outline-none h-10" />
+        <button type="submit" class="btn btn-sm btn-circle bg-yellow-300 border-none text-gray-800 hover:bg-yellow-400 h-10 w-10">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
                 <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
             </svg>
@@ -75,9 +75,9 @@
     <dialog id="login_modal" class="modal modal-bottom sm:modal-middle bg-black/50">
         <div class="modal-box">
             <h3 class="font-bold text-lg">환영합니다! 👋</h3>
-            <p class="py-4">채팅에서 사용할 닉네임을 입력해주세요.</p>
+            <p class="py-4 text-sm">사용하실 닉네임을 입력해주세요.</p>
             <form method="dialog" @submit.prevent="setNickname">
-                <input type="text" x-model="tempNick" placeholder="닉네임 (예: 라이언)" class="input input-bordered w-full mb-4" />
+                <input type="text" x-model="tempNick" placeholder="닉네임" class="input input-bordered w-full mb-4" />
                 <button class="btn btn-warning w-full" :disabled="!tempNick">시작하기</button>
             </form>
         </div>
@@ -96,7 +96,6 @@
                 minID: -1,
 
                 async initApp() {
-                    // 1. 닉네임 없으면 예쁜 모달 띄우기
                     if (!this.myNick) {
                         document.getElementById('login_modal').showModal();
                     } else {
@@ -104,8 +103,6 @@
                         await this.loadHistory();
                         this.connectSSE();
                     }
-                    
-                    // 뷰포트 설정
                     if (window.visualViewport) {
                         window.visualViewport.addEventListener('resize', () => {
                             document.body.style.height = window.visualViewport.height + 'px';
@@ -163,12 +160,15 @@
                         this.minID = history[history.length - 1].id;
                         this.hasMore = true;
                         
-                        // 과거 메시지는 배열 앞쪽에 추가 (Spread Operator)
-                        // 중복 제거하며 합치기
-                        const newMsgs = history.filter(h => !this.messages.some(m => m.id === h.id));
+                        // [핵심 수정] 서버가 준 최신순 데이터(DESC)를 뒤집어서(ASC) 과거순으로 정렬
+                        const sortedHistory = history.reverse();
+
+                        const newMsgs = sortedHistory.filter(h => !this.messages.some(m => m.id === h.id));
+                        
+                        // 과거 메시지는 배열의 '앞'에 붙임
                         this.messages = [...newMsgs, ...this.messages];
                         
-                        // 첫 로딩이면 스크롤 아래로
+                        // 첫 로딩일 때만 스크롤을 맨 아래로
                         if (url === '/history') {
                             this.$nextTick(() => document.getElementById('chat-box').scrollTop = 99999);
                         }
@@ -183,8 +183,9 @@
                         const data = JSON.parse(e.data);
                         if (this.messages.some(m => m.id === data.id)) return;
                         
+                        // 새 메시지는 배열 '뒤'에 붙임 (Push)
                         this.messages.push(data);
-                        // 스크롤 자동 이동
+                        
                         this.$nextTick(() => {
                             const chatBox = document.getElementById('chat-box');
                             chatBox.scrollTop = chatBox.scrollHeight;
