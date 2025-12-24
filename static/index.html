@@ -3,189 +3,369 @@
 <head>
     <meta charset="UTF-8">
     <title>CoTalk 🥤</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <style>
-        /* 화면 전체를 꽉 채우는 Flex 레이아웃 */
+        * { box-sizing: border-box; }
         body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Apple SD Gothic Neo', sans-serif; background: #b2c7d9; }
         
+        /* 앱 전체 컨테이너 (JS로 높이 조절됨) */
         #app {
             display: flex;
             flex-direction: column;
-            height: 100dvh; /* 모바일 브라우저 높이 이슈 해결용 단위 */
+            height: 100%; 
             max-width: 600px;
             margin: 0 auto;
             background: #fff;
+            position: relative;
         }
 
-        /* 채팅창 헤더 */
         header {
-            background: #fef01b; /* 카○오톡 느낌 */
-            padding: 15px;
+            background: #fef01b;
+            padding: 12px;
             font-weight: bold;
             color: #3b1e1e;
             text-align: center;
             box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            z-index: 10;
         }
 
-        /* 메시지 목록 (스크롤 영역) */
+        /* 채팅 영역 */
         #chat-box {
-            flex: 1; /* 남은 공간 모두 차지 */
+            flex: 1;
             overflow-y: auto;
             padding: 15px;
             background: #b2c7d9;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            scroll-behavior: smooth; /* 부드러운 스크롤 */
         }
 
-        /* 메시지 공통 스타일 */
-        .msg-row {
-            display: flex;
-            flex-direction: column;
-            max-width: 70%;
-        }
-        
-        .nick {
-            font-size: 12px;
+        /* 더 불러오기 버튼 */
+        #load-more-btn {
+            align-self: center;
+            background: rgba(0,0,0,0.1);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
             color: #555;
-            margin-bottom: 4px;
-            margin-left: 2px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            display: none; /* 초기엔 숨김 */
         }
-        
+
+        /* 메시지 스타일 */
+        .msg-row { display: flex; flex-direction: column; max-width: 70%; }
+        .nick { font-size: 12px; color: #555; margin-bottom: 4px; margin-left: 2px; }
         .bubble {
             padding: 8px 12px;
             border-radius: 12px;
             font-size: 15px;
             line-height: 1.4;
-            position: relative;
             word-break: break-all;
+            position: relative;
         }
-
-        .time {
-            font-size: 10px;
-            color: #555;
-            align-self: flex-end; /* 말풍선 옆 하단 */
-            margin: 0 4px;
-        }
-
-        /* 상대방 메시지 (왼쪽) */
-        .msg-row.other {
-            align-self: flex-start;
-        }
-        .msg-row.other .bubble {
-            background: #ffffff;
-            border-top-left-radius: 0;
-            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
-        }
-
-        /* 내 메시지 (오른쪽) */
-        .msg-row.my {
-            align-self: flex-end;
-            align-items: flex-end;
-        }
-        .msg-row.my .nick {
-            display: none; /* 내 닉네임은 굳이 안 보여줌 */
-        }
-        .msg-row.my .bubble {
-            background: #fef01b;
-            border-top-right-radius: 0;
-            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
-        }
-
-        /* 메시지 + 시간 컨테이너 */
-        .bubble-wrap {
-            display: flex;
-            align-items: flex-end;
-        }
-        .msg-row.my .bubble-wrap { flex-direction: row-reverse; } /* 내꺼는 시간 왼쪽 */
+        .time { font-size: 10px; color: #555; margin: 0 4px; align-self: flex-end; white-space: nowrap; }
+        
+        /* 상대방 */
+        .msg-row.other { align-self: flex-start; }
+        .msg-row.other .bubble { border-top-left-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        
+        /* 나 */
+        .msg-row.my { align-self: flex-end; align-items: flex-end; }
+        .msg-row.my .nick { display: none; }
+        .msg-row.my .bubble { border-top-right-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .bubble-wrap { display: flex; align-items: flex-end; }
+        .msg-row.my .bubble-wrap { flex-direction: row-reverse; }
 
         /* 입력창 영역 */
         #input-area {
             padding: 10px;
             background: #fff;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             border-top: 1px solid #ddd;
+            align-items: center;
         }
-        input {
+
+        /* + 버튼 및 메뉴 */
+        #settings-btn {
+            font-size: 20px;
+            color: #888;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        
+        /* 설정 메뉴 팝업 */
+        #settings-menu {
+            position: absolute;
+            bottom: 70px;
+            left: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            display: none; /* 토글 */
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            width: 200px;
+            z-index: 20;
+        }
+        #settings-menu button {
+            background: #f1f1f1;
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        input[type="text"] {
             flex: 1;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 20px;
             outline: none;
-            font-size: 16px; /* 16px 이상이어야 iOS에서 확대 안 됨 */
+            font-size: 16px;
         }
-        button {
+        button[type="submit"] {
             background: #fef01b;
             border: none;
-            padding: 0 20px;
+            padding: 0 15px;
+            height: 40px;
             border-radius: 20px;
             font-weight: bold;
             color: #3b1e1e;
-            cursor: pointer;
         }
-        button:active { opacity: 0.8; }
     </style>
 </head>
 <body>
     <div id="app">
-        <header>CoTalk 🥤 <span id="my-nick-display" style="font-size:0.8em; font-weight:normal;"></span></header>
-        <div id="chat-box"></div>
+        <header>CoTalk 🥤 <span id="my-info" style="font-size:0.8em; font-weight:normal;"></span></header>
+        
+        <div id="chat-box">
+            <button id="load-more-btn" onclick="loadHistory()">⬆ 더 불러오기</button>
+            <div id="msg-list"></div>
+        </div>
+
+        <div id="settings-menu">
+            <label style="font-size:12px; color:#666;">내 말풍선 색상</label>
+            <input type="color" id="color-picker" style="width:100%; height:30px; border:none;">
+            <button onclick="changeNickname()">닉네임 변경 (로그아웃)</button>
+        </div>
+
         <form id="input-area" onsubmit="sendMsg(event)">
+            <button type="button" id="settings-btn" onclick="toggleSettings()">+</button>
             <input type="text" id="msg" placeholder="메시지 입력..." autocomplete="off">
             <button type="submit">전송</button>
         </form>
     </div>
 
     <script>
-        // 1. 닉네임 설정 로직
+        const chatBox = document.getElementById('chat-box');
+        const msgList = document.getElementById('msg-list');
+        const loadBtn = document.getElementById('load-more-btn');
         let myNick = localStorage.getItem('cotalk_nick');
-        
-        while (!myNick) {
-            myNick = prompt("사용하실 닉네임을 입력해주세요!");
-            if (myNick) {
-                localStorage.setItem('cotalk_nick', myNick);
+        let myColor = localStorage.getItem('cotalk_color') || '#fef01b'; // 기본 노랑
+        let minID = -1; // 페이징용 커서
+
+        // [핵심] 키보드 뷰포트 문제 해결 (VisualViewport API)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                // 키보드가 올라오면 높이가 줄어듦 -> 앱 높이를 거기에 맞춤
+                document.getElementById('app').style.height = `${window.visualViewport.height}px`;
+                // 포커스 상태라면 스크롤을 맨 아래로
+                if(document.activeElement.tagName === 'INPUT') {
+                    setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
+                }
+            });
+        }
+
+        // 초기화
+        initApp();
+
+        async function initApp() {
+            if (!myNick) {
+                await performLogin();
+            } else {
+                // 저장된 닉네임이 있으면 DB 색상 동기화
+                checkServerColor(myNick);
+            }
+            updateMyInfo();
+            
+            // 1. 최근 메시지 로드 (History API)
+            await loadHistory();
+            
+            // 2. 실시간 SSE 연결
+            connectSSE();
+        }
+
+        // 로그인 절차
+        async function performLogin() {
+            let nickInput = null;
+            while (!nickInput) {
+                nickInput = prompt("닉네임을 입력해주세요:");
+            }
+            myNick = nickInput;
+            localStorage.setItem('cotalk_nick', myNick);
+            await checkServerColor(myNick);
+        }
+
+        // 서버에서 내 색상 가져오기
+        async function checkServerColor(nick) {
+            try {
+                const res = await fetch(`/login?nick=${encodeURIComponent(nick)}`);
+                const data = await res.json();
+                
+                if (data.color_code) {
+                    // DB에 색이 있으면 묻지 않고 적용
+                    myColor = data.color_code;
+                } else {
+                    // DB에 색이 없으면 색상 선택 유도 (혹은 랜덤)
+                    // 여기서는 기본 노랑으로 두되, 설정창에서 바꾸게 함
+                }
+                localStorage.setItem('cotalk_color', myColor);
+                document.getElementById('color-picker').value = myColor;
+            } catch (e) { console.error(e); }
+        }
+
+        function updateMyInfo() {
+            document.getElementById('my-info').textContent = `(${myNick})`;
+            document.getElementById('color-picker').value = myColor;
+        }
+
+        // 설정 메뉴 토글
+        function toggleSettings() {
+            const menu = document.getElementById('settings-menu');
+            menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        // 색상 변경 (DB 반영은 메시지 보낼 때 됨)
+        document.getElementById('color-picker').addEventListener('change', (e) => {
+            myColor = e.target.value;
+            localStorage.setItem('cotalk_color', myColor);
+            toggleSettings(); // 닫기
+        });
+
+        // 닉네임 변경
+        function changeNickname() {
+            if(confirm("닉네임을 변경하시겠습니까? (현재 대화창은 새로고침됩니다)")) {
+                localStorage.removeItem('cotalk_nick');
+                location.reload();
             }
         }
-        document.getElementById('my-nick-display').textContent = `(${myNick})`;
 
-        const chatBox = document.getElementById('chat-box');
-        
-        // 2. 실시간 메시지 수신 (SSE)
-        const evtSource = new EventSource("/stream");
-        evtSource.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-            
-            // 내 닉네임과 보낸 사람 닉네임 비교
+        // 과거 기록 불러오기
+        async function loadHistory() {
+            let url = '/history';
+            if (minID !== -1) {
+                url += `?before_id=${minID}`;
+            }
+
+            try {
+                const res = await fetch(url);
+                const history = await res.json();
+
+                if (history && history.length > 0) {
+                    // ID 갱신 (가장 오래된 ID 기억)
+                    minID = history[history.length - 1].id;
+                    loadBtn.style.display = 'block';
+
+                    // 역순으로 렌더링 (prepend)
+                    // history는 최신순(DESC)으로 오므로, 뒤집지 않고 순서대로 위에서부터 끼워넣어야 함?
+                    // 아니, 서버는 DESC(50, 49, 48...)로 줌.
+                    // 화면엔 48, 49, 50 순으로 쌓여야 함.
+                    // prepend를 하려면 50넣고, 그 위에 49넣고.. 이렇게 해야함.
+                    
+                    // history 배열: [ID: 100, ID: 99, ... ID: 70]
+                    // 화면 상단에 끼울때는 70번부터 100번 순서로 쌓인 블록을 통째로 끼워야 자연스러움.
+                    // 따라서 history를 reverse 해서 하나씩 prepend 하거나
+                    // DocumentFragment를 만들어 prepend.
+                    
+                    const frag = document.createDocumentFragment();
+                    // 배열을 뒤집어서 (오래된 것 -> 최신 것) 순서로 만듬
+                    // 예: [70, 71... 100]
+                    // 이걸 리스트의 맨 위에 하나씩 꽂으면? 
+                    // 1. 70 꽂음 -> [70]
+                    // 2. 71 꽂음 (70 위에) -> [71, 70] (X)
+                    // 아, prepend는 맨 앞에 넣는 것.
+                    // [기존: 101, 102]
+                    // 100을 prepend -> [100, 101, 102]
+                    // 99를 prepend -> [99, 100, 101, 102]
+                    // 즉, 최신순(DESC) 그대로 하나씩 prepend 하면 됨!
+                    
+                    history.forEach(msg => {
+                        const row = createMsgRow(msg);
+                        msgList.insertBefore(row, msgList.firstChild);
+                    });
+                    
+                    // 처음 로딩일 때만 스크롤 맨 아래로
+                    if (url === '/history') {
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                    }
+                } else {
+                    loadBtn.style.display = 'none'; // 더 이상 없음
+                    if (minID === -1) {
+                        // 아예 글이 하나도 없는 경우
+                    } else {
+                        alert("마지막 대화입니다.");
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        // SSE 연결
+        function connectSSE() {
+            const evtSource = new EventSource("/stream");
+            evtSource.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                const row = createMsgRow(data);
+                msgList.appendChild(row); // 새 메시지는 아래에 추가
+                chatBox.scrollTop = chatBox.scrollHeight;
+            };
+        }
+
+        // 메시지 HTML 생성
+        function createMsgRow(data) {
             const isMe = data.sender_nick === myNick;
-            
             const row = document.createElement('div');
             row.className = `msg-row ${isMe ? 'my' : 'other'}`;
+            
+            // 말풍선 색상: 내꺼면 내 설정색, 남꺼면 DB에서 온 색
+            // 남의 메시지는 data.sender_color가 DB에서 조회된 값임 (없으면 흰색)
+            // 내 메시지라도 서버 갔다 온 거면 data.sender_color 사용
+            // 다만, "나"는 내 로컬 설정(myColor)을 우선 보여주는 게 UX상 자연스러움 (변경 즉시 반영 위해)
+            
+            const bubbleColor = isMe ? myColor : (data.sender_color || '#ffffff');
+            
+            // 텍스트 색상 결정 (배경이 어두우면 글자 흰색) -> 간단히 밝기 계산은 생략하고, 일단 검정/흰색 처리 필요하지만
+            // 여기선 심플하게: 노란 계열이면 검정 글씨, 그 외엔... 일단 검정으로 통일하겠습니다.
             
             row.innerHTML = `
                 <span class="nick">${data.sender_nick}</span>
                 <div class="bubble-wrap">
-                    <div class="bubble">${data.content}</div>
+                    <div class="bubble" style="background-color: ${bubbleColor};">${data.content}</div>
                     <span class="time">${data.time}</span>
                 </div>
             `;
-            
-            chatBox.appendChild(row);
-            chatBox.scrollTop = chatBox.scrollHeight; // 자동 스크롤
-        };
+            return row;
+        }
 
-        // 3. 메시지 전송
         function sendMsg(e) {
             e.preventDefault();
             const input = document.getElementById('msg');
             const msg = input.value;
             if (!msg) return;
 
-            // 닉네임도 같이 보냄 (&nick=...)
+            // 닉네임, 색상, 메시지 전송
             fetch('/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `msg=${encodeURIComponent(msg)}&nick=${encodeURIComponent(myNick)}`
+                body: `msg=${encodeURIComponent(msg)}&nick=${encodeURIComponent(myNick)}&color=${encodeURIComponent(myColor)}`
             });
             input.value = '';
             input.focus();
