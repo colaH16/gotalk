@@ -13,5 +13,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o cotalk-server main.go
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /app/cotalk-server .
+COPY --from=builder /app/static ./static
 EXPOSE 8080
 CMD ["./cotalk-server"]
