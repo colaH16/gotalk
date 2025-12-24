@@ -7,16 +7,24 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/nats-io/nats.go"
 )
 
-var nc *nats.Conn
-var db *sql.DB
-var hostname string
+var (
+	nc       *nats.Conn
+	db       *sql.DB
+	hostname string
+
+	// [핵심] 사용자 관리용 Hub
+	// 접속한 클라이언트들의 채널을 보관하는 명부
+	clients   = make(map[chan string]bool) 
+	broadcast = make(chan string)           // NATS에서 받은 메시지를 뿌리는 파이프
+	mutex     = sync.Mutex{}                // 명부 작성할 때 충돌 방지용 자물쇠
+)
 
 type Message struct {
 	ID          int    `json:"id"`
@@ -37,12 +45,16 @@ func main() {
 	initDB()
 	initNATS()
 
+	// [중요] 방송실 가동 (고루틴)
+	// 들어오는 메시지를 모든 클라이언트에게 배달하는 역할
+	go handleMessages()
+
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 	http.HandleFunc("/stream", streamHandler)
 	http.HandleFunc("/send", sendHandler)
 	http.HandleFunc("/history", historyHandler)
 	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/update", updateProfileHandler) // [추가] 프로필 업데이트용
+	http.HandleFunc("/update", updateProfileHandler)
 
 	port := "8080"
 	log.Printf("🥤 CoTalk Server started on %s (Pod: %s)", port, hostname)
@@ -50,6 +62,86 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// [핵심 로직] 방송실: NATS에서 온 메시지를 접속자 전원에게 쏜다
+func handleMessages() {
+	for {
+		// 1. 방송 파이프에서 메시지 하나 꺼냄
+		msg := <-broadcast
+		
+		// 2. 명부(clients)를 펼침 (자물쇠 잠그고)
+		mutex.Lock()
+		for clientChan := range clients {
+			// 3. 각 사용자에게 메시지 전송 (Non-blocking)
+			// 듣지 않는 사용자가 있어도 멈추지 않고 패스함
+			select {
+			case clientChan <- msg:
+			default:
+				// 너무 느린 사용자는 명부에서 지울 수도 있음 (여기선 생략)
+			}
+		}
+		mutex.Unlock()
+	}
+}
+
+func initNATS() {
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" { natsURL = nats.DefaultURL }
+	
+	var err error
+	nc, err = nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
+	if err != nil { log.Fatal(err) }
+	
+	// [변경] 비동기 구독 (Async Subscribe)
+	// 메시지가 오면 즉시 broadcast 채널로 던져버림
+	nc.Subscribe("chat.global", func(m *nats.Msg) {
+		broadcast <- string(m.Data)
+	})
+	
+	log.Println("✅ Connected to NATS & Listening...")
+}
+
+// [변경] 스트림 핸들러: NATS 구독 안 함 -> Hub에 등록만 함
+func streamHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// 1. 내 전용 채널 생성
+	myChan := make(chan string, 10) // 버퍼를 줘서 약간의 여유를 둠
+
+	// 2. 명부에 등록 (입장)
+	mutex.Lock()
+	clients[myChan] = true
+	mutex.Unlock()
+
+	// 3. 나가면 명부에서 삭제 (퇴장)
+	defer func() {
+		mutex.Lock()
+		delete(clients, myChan)
+		close(myChan)
+		mutex.Unlock()
+	}()
+
+	notify := r.Context().Done()
+
+	for {
+		select {
+		case <-notify:
+			return // 브라우저 끄면 종료
+		case msg := <-myChan:
+			// 4. 방송실에서 내 채널로 넣어준 메시지를 화면에 씀
+			fmt.Fprintf(w, "data: %s\n\n", msg)
+			w.(http.Flusher).Flush()
+		case <-time.After(15 * time.Second):
+			// 5. 15초간 조용하면 생존신고 (KeepAlive)
+			fmt.Fprintf(w, ":keepalive\n\n")
+			w.(http.Flusher).Flush()
+		}
+	}
+}
+
+// --- 아래는 기존과 동일하거나 DB 관련 로직 ---
 
 func initDB() {
 	dbHost := os.Getenv("DB_HOST")
@@ -84,20 +176,11 @@ func initDB() {
 			color_code TEXT
 		);`,
 	}
-	
 	for _, query := range queries {
 		if _, err := db.Exec(query); err != nil {
 			log.Printf("Schema Warning: %v", err)
 		}
 	}
-}
-
-func initNATS() {
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" { natsURL = nats.DefaultURL }
-	var err error
-	nc, err = nats.Connect(natsURL, nats.Name("GoTalk"), nats.MaxReconnects(-1))
-	if err != nil { log.Fatal(err) }
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -106,56 +189,37 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT color_code FROM users WHERE nickname = $1", nick).Scan(&color)
 	
 	resp := User{Nickname: nick}
-	if err == nil {
-		resp.ColorCode = color
-	} else {
-		resp.ColorCode = ""
-	}
+	if err == nil { resp.ColorCode = color }
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-// [추가] 닉네임이나 색상만 변경하고 싶을 때 사용
 func updateProfileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost { return }
 	nickname := r.FormValue("nick")
 	color := r.FormValue("color")
-
 	if nickname == "" { return }
 	if color == "" { color = "#ffffff" }
-
-	// DB 업데이트 (UPSERT)
 	_, err := db.Exec(`
 		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
 		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
 		nickname, color)
-	
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), 500); return }
 	w.WriteHeader(http.StatusOK)
 }
 
 func historyHandler(w http.ResponseWriter, r *http.Request) {
 	beforeIDStr := r.URL.Query().Get("before_id")
 	limit := 30 
-
 	baseQuery := `
 		SELECT 
-			m.id, 
-			m.content, 
-			m.sender_pod, 
-			m.sender_nick, 
-			COALESCE(u.color_code, '#ffffff'),
-			to_char(m.created_at, 'HH24:MI:SS') 
+			m.id, m.content, m.sender_pod, m.sender_nick, 
+			COALESCE(u.color_code, '#ffffff'), to_char(m.created_at, 'HH24:MI:SS') 
 		FROM messages m
 		LEFT JOIN users u ON m.sender_nick = u.nickname
 	`
-
 	var rows *sql.Rows
 	var err error
-
 	if beforeIDStr != "" {
 		beforeID, _ := strconv.Atoi(beforeIDStr)
 		query := baseQuery + " WHERE m.id < $1 ORDER BY m.id DESC LIMIT $2"
@@ -164,11 +228,7 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 		query := baseQuery + " ORDER BY m.id DESC LIMIT $1"
 		rows, err = db.Query(query, limit)
 	}
-
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), 500); return }
 	defer rows.Close()
 
 	var history []Message
@@ -177,7 +237,6 @@ func historyHandler(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&m.ID, &m.Content, &m.SenderPod, &m.SenderNick, &m.SenderColor, &m.Time)
 		history = append(history, m)
 	}
-	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(history)
 }
@@ -186,68 +245,30 @@ func sendHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost { return }
 	content := r.FormValue("msg")
 	nickname := r.FormValue("nick")
-	color := r.FormValue("color") // 현재 클라이언트가 선택한 색상
-
+	color := r.FormValue("color")
 	if content == "" || nickname == "" { return }
 	if color == "" { color = "#ffffff" }
 
-	// 1. Users 테이블 업데이트 (메세지 보낼 때도 색상 동기화)
+	// DB 저장
 	_, err := db.Exec(`
 		INSERT INTO users (nickname, color_code) VALUES ($1, $2)
 		ON CONFLICT (nickname) DO UPDATE SET color_code = $2`, 
 		nickname, color)
-	if err != nil { log.Println("User Update Error:", err) }
-
-	// 2. Messages 테이블 저장
+	
 	var id int
 	err = db.QueryRow(
 		"INSERT INTO messages (content, sender_pod, sender_nick) VALUES ($1, $2, $3) RETURNING id",
 		content, hostname, nickname,
 	).Scan(&id)
 	
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
+	if err != nil { http.Error(w, err.Error(), 500); return }
 
-	// 3. NATS 전송 (여기서는 즉시 반영을 위해 보낸 색상을 그대로 실어보냄)
+	// NATS 전송
 	msg := Message{
-		ID:          id,
-		Content:     content,
-		SenderPod:   hostname,
-		SenderNick:  nickname,
-		SenderColor: color,
-		Time:        time.Now().Format("15:04:05"),
+		ID: id, Content: content, SenderPod: hostname, SenderNick: nickname, SenderColor: color,
+		Time: time.Now().Format("15:04:05"),
 	}
 	data, _ := json.Marshal(msg)
 	nc.Publish("chat.global", data)
 	w.WriteHeader(http.StatusOK)
-}
-
-func streamHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	sub, err := nc.SubscribeSync("chat.global")
-	if err != nil { return }
-	defer sub.Unsubscribe()
-
-	notify := r.Context().Done()
-	for {
-		select {
-		case <-notify:
-			return
-		default:
-			m, err := sub.NextMsg(1 * time.Second)
-			if err == nats.ErrTimeout {
-				fmt.Fprintf(w, ":keepalive\n\n")
-				w.(http.Flusher).Flush()
-				continue
-			}
-			if err != nil { return }
-			fmt.Fprintf(w, "data: %s\n\n", string(m.Data))
-			w.(http.Flusher).Flush()
-		}
-	}
 }
