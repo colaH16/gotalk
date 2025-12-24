@@ -1,358 +1,207 @@
 <!DOCTYPE html>
-<html lang="ko">
-<head>
+<html lang="ko" data-theme="pastel"> <head>
     <meta charset="UTF-8">
     <title>CoTalk 🥤</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
     <style>
-        * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Apple SD Gothic Neo', sans-serif; background: #b2c7d9; }
+        /* 폰트 및 기본 설정 */
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; overflow: hidden; }
         
-        #app {
-            display: flex;
-            flex-direction: column;
-            height: 100%; 
-            max-width: 600px;
-            margin: 0 auto;
-            background: #fff;
-            position: relative;
-        }
-
-        header {
-            background: #fef01b;
-            padding: 12px;
-            font-weight: bold;
-            color: #3b1e1e;
-            text-align: center;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            z-index: 10;
-        }
-
-        #chat-box {
-            flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            background: #b2c7d9;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            scroll-behavior: auto;
-        }
-
-        #load-more-btn {
-            align-self: center;
-            background: rgba(0,0,0,0.1);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            color: #555;
-            font-size: 12px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            display: none; 
-        }
-
-        /* 메시지 행 스타일 */
-        .msg-row { 
-            display: flex; 
-            flex-direction: column; 
-            max-width: 70%; 
-            /* 기본은 왼쪽 정렬 */
-            align-self: flex-start;
-        }
-
-        .nick { font-size: 12px; color: #555; margin-bottom: 4px; margin-left: 2px; }
-        .bubble {
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 15px;
-            line-height: 1.4;
-            word-break: break-all;
-            position: relative;
-        }
-        .time { font-size: 10px; color: #555; margin: 0 4px; align-self: flex-end; white-space: nowrap; }
+        /* 스크롤바 숨기기 (깔끔하게) */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* 상대방 메시지 */
-        .msg-row.other { 
-            align-self: flex-start; 
+        /* 말풍선 애니메이션 */
+        @keyframes popIn {
+            0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .msg-row.other .bubble { border-top-left-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-        
-        /* [수정] 내 메시지 (오른쪽 정렬 강화) */
-        .msg-row.my { 
-            align-self: flex-end; 
-            align-items: flex-end;
-            margin-left: auto; /* 이것이 오른쪽 끝으로 미는 핵심입니다 */
-        }
-        .msg-row.my .nick { display: none; }
-        .msg-row.my .bubble { border-top-right-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
-        .bubble-wrap { display: flex; align-items: flex-end; }
-        .msg-row.my .bubble-wrap { flex-direction: row-reverse; }
-
-        #input-area {
-            padding: 10px;
-            background: #fff;
-            display: flex;
-            gap: 8px;
-            border-top: 1px solid #ddd;
-            align-items: center;
-        }
-
-        #settings-btn {
-            font-size: 20px;
-            color: #888;
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 0 5px;
-        }
-        
-        #settings-menu {
-            position: absolute;
-            bottom: 70px;
-            left: 10px;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
-            display: none;
-            flex-direction: column;
-            gap: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            width: 200px;
-            z-index: 20;
-        }
-        #settings-menu button {
-            background: #f1f1f1;
-            border: none;
-            padding: 8px;
-            border-radius: 4px;
-            text-align: left;
-            font-size: 14px;
-        }
-
-        input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            outline: none;
-            font-size: 16px;
-        }
-        button[type="submit"] {
-            background: #fef01b;
-            border: none;
-            padding: 0 15px;
-            height: 40px;
-            border-radius: 20px;
-            font-weight: bold;
-            color: #3b1e1e;
-        }
+        .msg-anim { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     </style>
 </head>
-<body>
-    <div id="app">
-        <header>CoTalk 🥤 <span id="my-info" style="font-size:0.8em; font-weight:normal;"></span></header>
-        
-        <div id="chat-box">
-            <button id="load-more-btn" onclick="loadHistory()">⬆ 더 불러오기</button>
-            <div id="msg-list"></div>
+<body x-data="appData()" x-init="initApp()" class="bg-blue-100 h-[100dvh] flex flex-col max-w-md mx-auto shadow-2xl relative">
+
+    <header class="bg-yellow-300 p-4 text-center font-bold text-gray-800 shadow-sm z-10 flex justify-between items-center">
+        <span>CoTalk 🥤 <span x-text="myNick ? `(${myNick})` : ''" class="text-xs font-normal"></span></span>
+        <button @click="showSettings = !showSettings" class="btn btn-ghost btn-circle btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        </button>
+    </header>
+
+    <div id="chat-box" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-[#b2c7d9]">
+        <div x-show="hasMore" class="text-center mb-2">
+            <button @click="loadHistory()" class="btn btn-xs btn-neutral opacity-50 rounded-full">⬆ 더 불러오기</button>
         </div>
 
-        <div id="settings-menu">
-            <label style="font-size:12px; color:#666;">내 말풍선 색상 (변경 시 새로고침)</label>
-            <input type="color" id="color-picker" style="width:100%; height:30px; border:none;">
-            <button onclick="changeNickname()">닉네임 변경 (로그아웃)</button>
-        </div>
-
-        <form id="input-area" onsubmit="sendMsg(event)">
-            <button type="button" id="settings-btn" onclick="toggleSettings()">+</button>
-            <input type="text" id="msg" placeholder="메시지 입력..." autocomplete="off">
-            <button type="submit">전송</button>
-        </form>
+        <template x-for="msg in messages" :key="msg.id">
+            <div :id="'msg-'+msg.id" class="chat msg-anim" :class="msg.sender_nick === myNick ? 'chat-end' : 'chat-start'">
+                <div class="chat-header text-xs opacity-50 mb-1 ml-1" x-show="msg.sender_nick !== myNick" x-text="msg.sender_nick"></div>
+                
+                <div class="chat-bubble text-sm shadow-sm" 
+                     :class="msg.sender_nick === myNick ? 'text-gray-900' : 'bg-white text-gray-900'"
+                     :style="msg.sender_nick === myNick ? `background-color: ${myColor}` : (msg.sender_color ? `background-color: ${msg.sender_color}` : '')">
+                    <span x-text="msg.content"></span>
+                </div>
+                
+                <div class="chat-footer opacity-50 text-[10px] mt-1" x-text="msg.time"></div>
+            </div>
+        </template>
     </div>
 
+    <div x-show="showSettings" @click.outside="showSettings = false" x-transition class="absolute bottom-20 right-4 w-64 bg-white rounded-xl shadow-xl p-4 z-20 border border-gray-200">
+        <h3 class="font-bold text-sm mb-2">설정</h3>
+        <div class="form-control w-full max-w-xs mb-3">
+            <label class="label"><span class="label-text">내 말풍선 색상</span></label>
+            <input type="color" x-model="myColor" @change="updateColor()" class="w-full h-8 cursor-pointer rounded">
+        </div>
+        <button @click="changeNickname()" class="btn btn-sm btn-outline btn-error w-full">로그아웃 (닉네임 변경)</button>
+    </div>
+
+    <form @submit.prevent="sendMessage" class="bg-white p-3 flex gap-2 border-t border-gray-200 items-center">
+        <input type="text" x-model="inputMsg" placeholder="메시지 입력..." class="input input-bordered input-sm w-full rounded-full focus:outline-none" />
+        <button type="submit" class="btn btn-sm btn-circle bg-yellow-300 border-none text-gray-800 hover:bg-yellow-400">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
+        </button>
+    </form>
+
+    <dialog id="login_modal" class="modal modal-bottom sm:modal-middle bg-black/50">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg">환영합니다! 👋</h3>
+            <p class="py-4">채팅에서 사용할 닉네임을 입력해주세요.</p>
+            <form method="dialog" @submit.prevent="setNickname">
+                <input type="text" x-model="tempNick" placeholder="닉네임 (예: 라이언)" class="input input-bordered w-full mb-4" />
+                <button class="btn btn-warning w-full" :disabled="!tempNick">시작하기</button>
+            </form>
+        </div>
+    </dialog>
+
     <script>
-        const chatBox = document.getElementById('chat-box');
-        const msgList = document.getElementById('msg-list');
-        const loadBtn = document.getElementById('load-more-btn');
-        let myNick = localStorage.getItem('cotalk_nick');
-        let myColor = localStorage.getItem('cotalk_color') || '#fef01b';
-        let minID = -1;
+        function appData() {
+            return {
+                myNick: localStorage.getItem('cotalk_nick'),
+                myColor: localStorage.getItem('cotalk_color') || '#fef01b',
+                messages: [],
+                inputMsg: '',
+                showSettings: false,
+                tempNick: '',
+                hasMore: false,
+                minID: -1,
 
-        const viewportHandler = () => {
-            if (window.visualViewport) {
-                const height = window.visualViewport.height;
-                document.getElementById('app').style.height = `${height}px`;
-                window.scrollTo(0, 0); 
-                if(document.activeElement.tagName === 'INPUT') {
-                    setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
-                }
-            }
-        };
-
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', viewportHandler);
-            window.visualViewport.addEventListener('scroll', viewportHandler);
-        }
-
-        initApp();
-
-        async function initApp() {
-            if (!myNick) {
-                await performLogin();
-            } else {
-                checkServerColor(myNick);
-            }
-            updateMyInfo();
-            await loadHistory();
-            connectSSE();
-        }
-
-        async function performLogin() {
-            let nickInput = null;
-            while (!nickInput) {
-                nickInput = prompt("닉네임을 입력해주세요:");
-            }
-            myNick = nickInput;
-            localStorage.setItem('cotalk_nick', myNick);
-            await checkServerColor(myNick);
-        }
-
-        async function checkServerColor(nick) {
-            try {
-                const res = await fetch(`/login?nick=${encodeURIComponent(nick)}`);
-                const data = await res.json();
-                if (data.color_code) {
-                    myColor = data.color_code;
-                }
-                localStorage.setItem('cotalk_color', myColor);
-                document.getElementById('color-picker').value = myColor;
-            } catch (e) { console.error(e); }
-        }
-
-        function updateMyInfo() {
-            document.getElementById('my-info').textContent = `(${myNick})`;
-            document.getElementById('color-picker').value = myColor;
-        }
-
-        function toggleSettings() {
-            const menu = document.getElementById('settings-menu');
-            menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
-        }
-
-        // [핵심 변경] 색상 변경 시 -> DB 저장 -> 새로고침
-        document.getElementById('color-picker').addEventListener('change', async (e) => {
-            const newColor = e.target.value;
-            
-            // 1. 로컬 저장
-            localStorage.setItem('cotalk_color', newColor);
-            
-            // 2. 서버 DB에 즉시 업데이트 요청
-            try {
-                await fetch('/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `nick=${encodeURIComponent(myNick)}&color=${encodeURIComponent(newColor)}`
-                });
-                
-                // 3. 성공하면 페이지 새로고침 (과거 메세지 색상 반영을 위해)
-                location.reload();
-                
-            } catch(err) {
-                console.error("Color Update Failed", err);
-                alert("색상 변경 중 오류가 발생했습니다.");
-            }
-        });
-
-        function changeNickname() {
-            if(confirm("닉네임을 변경하시겠습니까?")) {
-                localStorage.removeItem('cotalk_nick');
-                location.reload();
-            }
-        }
-
-        async function loadHistory() {
-            let url = '/history';
-            if (minID !== -1) {
-                url += `?before_id=${minID}`;
-            }
-
-            try {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('History Fetch Failed');
-                
-                const history = await res.json();
-                if (history && history.length > 0) {
-                    minID = history[history.length - 1].id;
-                    loadBtn.style.display = 'block';
-
-                    history.forEach(msg => {
-                        if (document.getElementById(`msg-${msg.id}`)) return;
-                        const row = createMsgRow(msg);
-                        msgList.insertBefore(row, msgList.firstChild);
-                    });
-                    
-                    if (url === '/history') {
-                        chatBox.scrollTop = chatBox.scrollHeight;
+                async initApp() {
+                    // 1. 닉네임 없으면 예쁜 모달 띄우기
+                    if (!this.myNick) {
+                        document.getElementById('login_modal').showModal();
+                    } else {
+                        this.checkServerColor(this.myNick);
+                        await this.loadHistory();
+                        this.connectSSE();
                     }
-                } else {
-                    loadBtn.style.display = 'none';
-                    if (minID !== -1) alert("마지막 대화입니다.");
+                    
+                    // 뷰포트 설정
+                    if (window.visualViewport) {
+                        window.visualViewport.addEventListener('resize', () => {
+                            document.body.style.height = window.visualViewport.height + 'px';
+                            window.scrollTo(0, 0);
+                        });
+                    }
+                },
+
+                async setNickname() {
+                    if (!this.tempNick) return;
+                    this.myNick = this.tempNick;
+                    localStorage.setItem('cotalk_nick', this.myNick);
+                    await this.checkServerColor(this.myNick);
+                    document.getElementById('login_modal').close();
+                    await this.loadHistory();
+                    this.connectSSE();
+                },
+
+                async checkServerColor(nick) {
+                    try {
+                        const res = await fetch(`/login?nick=${encodeURIComponent(nick)}`);
+                        const data = await res.json();
+                        if (data.color_code) this.myColor = data.color_code;
+                        localStorage.setItem('cotalk_color', this.myColor);
+                    } catch (e) {}
+                },
+
+                async updateColor() {
+                    localStorage.setItem('cotalk_color', this.myColor);
+                    try {
+                        await fetch('/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
+                        });
+                        location.reload();
+                    } catch(e) {}
+                },
+
+                changeNickname() {
+                    if(confirm("정말 로그아웃 하시겠습니까?")) {
+                        localStorage.removeItem('cotalk_nick');
+                        location.reload();
+                    }
+                },
+
+                async loadHistory() {
+                    let url = '/history';
+                    if (this.minID !== -1) url += `?before_id=${this.minID}`;
+                    
+                    const res = await fetch(url);
+                    const history = await res.json();
+                    
+                    if (history && history.length > 0) {
+                        this.minID = history[history.length - 1].id;
+                        this.hasMore = true;
+                        
+                        // 과거 메시지는 배열 앞쪽에 추가 (Spread Operator)
+                        // 중복 제거하며 합치기
+                        const newMsgs = history.filter(h => !this.messages.some(m => m.id === h.id));
+                        this.messages = [...newMsgs, ...this.messages];
+                        
+                        // 첫 로딩이면 스크롤 아래로
+                        if (url === '/history') {
+                            this.$nextTick(() => document.getElementById('chat-box').scrollTop = 99999);
+                        }
+                    } else {
+                        this.hasMore = false;
+                    }
+                },
+
+                connectSSE() {
+                    const evtSource = new EventSource("/stream");
+                    evtSource.onmessage = (e) => {
+                        const data = JSON.parse(e.data);
+                        if (this.messages.some(m => m.id === data.id)) return;
+                        
+                        this.messages.push(data);
+                        // 스크롤 자동 이동
+                        this.$nextTick(() => {
+                            const chatBox = document.getElementById('chat-box');
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        });
+                    };
+                },
+
+                sendMessage() {
+                    if (!this.inputMsg) return;
+                    fetch('/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `msg=${encodeURIComponent(this.inputMsg)}&nick=${encodeURIComponent(this.myNick)}&color=${encodeURIComponent(this.myColor)}`
+                    });
+                    this.inputMsg = '';
                 }
-            } catch (e) { console.error(e); }
-        }
-
-        function connectSSE() {
-            const evtSource = new EventSource("/stream");
-            
-            evtSource.onmessage = function(e) {
-                try {
-                    const data = JSON.parse(e.data);
-                    if (document.getElementById(`msg-${data.id}`)) return; 
-
-                    const row = createMsgRow(data);
-                    msgList.appendChild(row);
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                } catch (err) {
-                    console.error("SSE Parse Error", err);
-                }
-            };
-        }
-
-        function createMsgRow(data) {
-            const isMe = data.sender_nick === myNick;
-            const row = document.createElement('div');
-            row.id = `msg-${data.id}`; 
-            
-            row.className = `msg-row ${isMe ? 'my' : 'other'}`;
-            
-            // 내가 쓴 글이면 내 설정색(즉시반영), 남이 쓴 글이면 DB색
-            const bubbleColor = isMe ? myColor : (data.sender_color || '#ffffff');
-            
-            row.innerHTML = `
-                <span class="nick">${data.sender_nick}</span>
-                <div class="bubble-wrap">
-                    <div class="bubble" style="background-color: ${bubbleColor};">${data.content}</div>
-                    <span class="time">${data.time}</span>
-                </div>
-            `;
-            return row;
-        }
-
-        function sendMsg(e) {
-            e.preventDefault();
-            const input = document.getElementById('msg');
-            const msg = input.value;
-            if (!msg) return;
-
-            fetch('/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `msg=${encodeURIComponent(msg)}&nick=${encodeURIComponent(myNick)}&color=${encodeURIComponent(myColor)}`
-            });
-            input.value = '';
-            input.focus();
+            }
         }
     </script>
 </body>
