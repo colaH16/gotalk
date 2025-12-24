@@ -41,11 +41,6 @@ type User struct {
 	ColorCode string `json:"color_code"`
 }
 
-type User struct {
-	Nickname  string `json:"nickname"`
-	ColorCode string `json:"color_code"`
-}
-
 func main() {
 	hostname, _ = os.Hostname()
 	initDB()
